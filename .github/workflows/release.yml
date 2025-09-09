@@ -1,0 +1,61 @@
+# .github/workflows/release.yml
+
+name: Release
+
+# 允许手动触发工作流
+on:
+  workflow_dispatch:
+
+jobs:
+  # 构建工作：在多个平台上运行
+  build:
+    name: ${{ matrix.os }} Build
+    runs-on: ${{ matrix.os }}
+    
+    # 使用矩阵策略在 Windows 和 Linux 上同时运行
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      # 步骤1：检出仓库代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 步骤2：设置 Rust 环境
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # 步骤3：构建项目（发布模式）
+      - name: Build project
+        run: cargo build --release
+
+      # 步骤4：获取项目名和版本号
+      # 使用 Bash Shell 获取元数据，并将其设置为环境变量
+      - name: Get Project Metadata
+        id: metadata
+        run: |
+          PROJECT_NAME=$(grep '^name = ' Cargo.toml | sed -E 's/name = "(.+)"/\1/')
+          VERSION=$(grep '^version = ' Cargo.toml | sed -E 's/version = "(.+)"/\1/')
+          echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+        shell: bash
+        
+      # 步骤5：重命名可执行文件
+      - name: Rename executable
+        run: |
+          if ("${{ matrix.os }}" -eq "windows-latest") {
+            mv target/release/${{ env.PROJECT_NAME }}.exe "${{ env.PROJECT_NAME }}-${{ env.VERSION }}.exe"
+          } else {
+            mv target/release/${{ env.PROJECT_NAME }} "${{ env.PROJECT_NAME }}-${{ env.VERSION }}"
+          }
+        shell: pwsh
+
+      # 步骤6：上传工件
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-${{ matrix.os }}
+          path: |
+            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}.exe
+            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}
