@@ -93,17 +93,17 @@ jobs:
         id: release_body
         run: |
           # 创建表格头部
-          SHASUM_TABLE="| 文件名 | SHA256 值 |\n| :--- | :--- |"
-
+          SHASUM_TABLE=$(echo -e "| 文件名 | SHA256 值 |\n| :--- | :--- |")
+          
           # 遍历所有下载的工件并计算哈希值
           for file in artifacts/*/*; do
             filename=$(basename $file)
             shasum=$(sha256sum "$file" | cut -d ' ' -f 1)
-            SHASUM_TABLE="$SHASUM_TABLE\n| $filename | \`$shasum\` |"
+            SHASUM_TABLE=$(echo -e "$SHASUM_TABLE\n| $filename | \`$shasum\` |")
           done
 
           # 组合正文和表格
-          BODY="## 文件校验\n\n为了验证下载文件的完整性，请使用以下 SHA256 校验和：\n\n$SHASUM_TABLE"
+          BODY=$(echo -e "## 文件校验\n\n为了验证下载文件的完整性，请使用以下 SHA256 校验和：\n\n$SHASUM_TABLE")
           
           # 将最终正文内容设置为输出
           echo "release_body=$BODY" >> $GITHUB_OUTPUT
