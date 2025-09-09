@@ -1,20 +1,12 @@
 use crate::combination_generator::CombinationGenerator;
 use crate::Args;
 
+pub(crate) use crate::jwt::verify_jwt_hs256_token;
 use clap::Parser;
-use hmac::{Hmac, KeyInit, Mac};
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::Rng;
 use rayon::current_thread_index;
 use rayon::iter::{ParallelBridge, ParallelIterator};
-pub(crate) use crate::jwt::verify_jwt_hs256_token;
-// 惰性迭代器，它不会一次性生成所有组合
-
-// 核心：实现 Iterator trait，使其能够按需生成下一个组合
-
-// 验证 JWT HS256 令牌的辅助函数
-
-// 初始化进度条
 fn init_progress_bar() -> ProgressBar {
     const TICK_CHARS: &[&str] = &[
         "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",               // 经典旋转器
