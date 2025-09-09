@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 mod cli;
 mod combination_generator;
 mod gui;
