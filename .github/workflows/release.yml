@@ -106,7 +106,9 @@ jobs:
           BODY=$(echo -e "## 文件校验\n\n为了验证下载文件的完整性，请使用以下 SHA256 校验和：\n\n$SHASUM_TABLE")
           
           # 将最终正文内容设置为输出
-          echo "release_body=$BODY" >> $GITHUB_OUTPUT
+          echo "release_body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       # 步骤5：创建 GitHub Release 并附加所有工件
       - name: Create Release
