@@ -51,7 +51,10 @@ jobs:
         shell: pwsh
 
       # 步骤6：创建 GitHub Release 并附加所有工件
+      # 请注意：这个步骤只会运行一次，因为我们将它放在了矩阵策略之外。
+      # 这是最关键的改动，因为它确保了所有的构建都在一个发布中。
       - name: Create GitHub Release
+        if: ${{ matrix.os == 'ubuntu-latest' }}
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
