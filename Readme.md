@@ -20,7 +20,6 @@
 * **并行处理**：利用 `rayon` 库进行并行化处理，以提高破解速度。
 * **极小的内存占用**：通过迭代器生成密钥组合，避免了将所有组合预先存储在内存中。CLI模式下仅占用2M内存
 
-
 ### 如何使用
 
 #### 1\. 构建项目
@@ -28,8 +27,8 @@
 请确电脑上有 Rust 编程环境。
 
 ```sh
-git clone <仓库地址>
-cd <项目目录>
+git clone https://github.com/KongJian520/JwtCracker.git
+cd JwtCracker
 cargo build --release
 ```
 
@@ -38,10 +37,8 @@ cargo build --release
 构建完成后，直接运行可执行文件即可启动 GUI 界面。
 
 ```sh
-./target/release/jwt-bruteforcer
+./target/release/JWTCracker.exe
 ```
-
-**注意**: 在 Windows 上，可执行文件的扩展名为 `.exe`。
 
 #### 3\. CLI 模式
 

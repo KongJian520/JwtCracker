@@ -1,4 +1,3 @@
-// 导入所需模块
 use crate::cli::verify_jwt_hs256_token;
 use crate::combination_generator::CombinationGenerator;
 use crate::jwt::{decode_jwt, encode_jwt};
@@ -442,7 +441,12 @@ fn load_fonts() -> FontDefinitions {
 
 pub fn show_gui() -> eframe::Result {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([400.0, 400.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([400.0, 400.0])
+            .with_icon(
+                eframe::icon_data::from_png_bytes(include_bytes!("assest/icons/icon.png"))
+                    .expect("Failed to load icon"),
+            ),
         ..Default::default()
     };
     eframe::run_native(
