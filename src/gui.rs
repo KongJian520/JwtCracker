@@ -424,8 +424,6 @@ impl eframe::App for MainWindow {
     }
 }
 
-/// 加载并设置自定义字体
-/// 返回: FontDefinitions
 fn load_fonts() -> FontDefinitions {
     let mut fonts = FontDefinitions::default();
     fonts.font_data.insert(
@@ -442,8 +440,6 @@ fn load_fonts() -> FontDefinitions {
     fonts
 }
 
-/// 启动GUI应用程序
-/// 返回: eframe::Result
 pub fn show_gui() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([400.0, 400.0]),
