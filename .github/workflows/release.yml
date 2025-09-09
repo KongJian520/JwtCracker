@@ -7,15 +7,16 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
-    name: Build, Upload, and Release
+  # 构建工作：在多个平台上运行并上传工件
+  build:
+    name: ${{ matrix.os }} Build
     runs-on: ${{ matrix.os }}
-    
+
     # 使用矩阵策略在 Windows 和 Linux 上同时运行
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-        
+
     steps:
       # 步骤1：检出仓库代码
       - name: Checkout repository
@@ -30,7 +31,6 @@ jobs:
         run: cargo build --release
 
       # 步骤4：获取项目元数据（项目名和版本号）
-      # 使用 Bash Shell 获取元数据，并将其设置为环境变量
       - name: Get Project Metadata
         id: metadata
         run: |
@@ -39,7 +39,7 @@ jobs:
           echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_ENV
         shell: bash
-        
+
       # 步骤5：重命名可执行文件
       - name: Rename executable
         run: |
@@ -50,18 +50,51 @@ jobs:
           }
         shell: pwsh
 
-      # 步骤6：创建 GitHub Release 并附加所有工件
-      # 请注意：这个步骤只会运行一次，因为我们将它放在了矩阵策略之外。
-      # 这是最关键的改动，因为它确保了所有的构建都在一个发布中。
-      - name: Create GitHub Release
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+      # 步骤6：上传构建好的工件
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-${{ matrix.os }}
+          path: |
+            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}.exe
+            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}
+
+  # 发布工作：在所有构建完成后执行
+  create_release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+
+    # 为此工作授予写入权限
+    permissions:
+      contents: write
+
+    steps:
+      # 步骤1：检出仓库代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 步骤2：下载所有工件
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      # 步骤3：获取项目版本号
+      - name: Get Project Version
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | sed -E 's/version = "(.+)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+        shell: bash
+
+      # 步骤4：创建 GitHub Release 并附加所有工件
+      - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ env.VERSION }}
           name: Release v${{ env.VERSION }}
-          files: |
-            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}.exe
-            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}
+          files: artifacts/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
