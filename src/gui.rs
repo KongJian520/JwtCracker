@@ -86,21 +86,16 @@ impl Default for MainWindow {
 }
 
 impl MainWindow {
-    /// 检查并处理来自后台任务线程的消息和状态
     fn handle_channels(&mut self, ctx: &egui::Context) {
-        // 如果有接收器，检查是否有新消息
         if let Some(rx) = &self.rx {
             loop {
-                // 尝试非阻塞地接收消息
                 match rx.try_recv() {
                     Ok(key) => {
-                        // 收到新密钥，更新UI并请求重绘
                         self.burped_key = key;
                         ctx.request_repaint();
                     }
-                    Err(TryRecvError::Empty) => break, // 通道为空，跳出循环
+                    Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
-                        // 通道已断开，说明后台线程已退出
                         self.rx = None;
                         break;
                     }
@@ -108,29 +103,23 @@ impl MainWindow {
             }
         }
 
-        // 如果任务句柄存在且任务已完成
         if let Some(handle) = self.task_handle.as_mut() {
             if handle.is_finished() {
-                // 等待任务完成并获取结果
                 match self.task_handle.take().unwrap().join() {
                     Ok(Some(key)) => {
-                        // 找到密钥，更新状态
                         self.burped_key = key;
                         self.status = RunningStatus::Found;
                         encode_jwt(self);
                     }
                     Ok(None) => {
-                        // 任务因停止或未找到而结束
                         if self.status == RunningStatus::Stopping {
                             self.status = RunningStatus::Stopped;
                         } else {
-                            // 未知错误或未找到密钥
                             self.status = RunningStatus::Error;
                             self.error_type = ErrorType::None;
                         }
                     }
                     Err(_) => {
-                        // 线程发生恐慌
                         self.status = RunningStatus::Error;
                         self.error_type = ErrorType::None;
                     }
@@ -139,10 +128,9 @@ impl MainWindow {
         }
     }
 
-    /// 渲染中央面板的UI
     fn render_central_panel(&mut self, ui: &mut egui::Ui) {
         let ui_width = ui.available_width();
-        // 渲染字符集选择和长度设置
+
         ui.horizontal(|ui| {
             ui.heading("选择字符集:");
             ui.checkbox(&mut self.use_user_charset, "自定义字符集");
@@ -185,7 +173,6 @@ impl MainWindow {
         });
         ui.separator();
 
-        // 用于语法高亮的闭包
         let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap_width: f32| {
             let mut layout_job = highlight(
                 ui.ctx(),
@@ -198,7 +185,6 @@ impl MainWindow {
             ui.fonts(|f| f.layout_job(layout_job))
         };
 
-        // JWT输入框
         if ui
             .add(
                 TextEdit::multiline(&mut self.jwt_burp_token)
@@ -213,11 +199,9 @@ impl MainWindow {
             .on_hover_text("预想要爆破的JWT字符串")
             .changed()
         {
-            // 当JWT输入框内容改变时，尝试解码
             decode_jwt(self);
         };
 
-        // Header和Payload编辑框
         ui.horizontal(|ui| {
             if ui
                 .add(
@@ -256,7 +240,6 @@ impl MainWindow {
             };
         });
 
-        // 签名结果显示框
         ui.add(
             TextEdit::multiline(&mut self.jwt_singed_token)
                 .font(TextStyle::Monospace)
@@ -269,9 +252,7 @@ impl MainWindow {
         .on_hover_text("使用爆破出来的密钥的JWT签名结果");
     }
 
-    /// 渲染底部面板的UI，包括状态和按钮
     fn render_bottom_panel(&mut self, ui: &mut egui::Ui) {
-        // 根据状态显示不同的文本和颜色
         let status_text = match self.status {
             RunningStatus::OK => RichText::new("准备就绪").color(egui::Color32::DARK_GREEN),
             RunningStatus::Running => RichText::new("Burping...").color(egui::Color32::BLACK),
@@ -293,22 +274,17 @@ impl MainWindow {
                 .color(egui::Color32::BLUE),
         };
 
-        // 克隆egui上下文，用于后台线程的重绘请求
         let ctx_clone = ui.ctx().clone();
 
         ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-            // 根据状态显示旋转器
             if self.status == RunningStatus::Running || self.status == RunningStatus::Stopping {
                 ui.add(egui::Spinner::new());
             }
 
-            // 显示状态文本
             ui.add(Label::new(status_text));
 
-            // 右对齐按钮
             ui.with_layout(Layout::right_to_left(Align::RIGHT), |child_ui| {
                 child_ui.horizontal(|button_ui| {
-                    // 只有当状态不是Stopping时才启用按钮
                     button_ui.add_enabled_ui(
                         !(self.status == RunningStatus::Running),
                         |start_button_ui| {
@@ -317,11 +293,11 @@ impl MainWindow {
                             }
                         },
                     );
-                    // 停止按钮
+
                     if button_ui.button("停止").clicked() {
                         self.stop_bruteforce_task();
                     }
-                    // 清空按钮
+
                     button_ui.add_enabled_ui(
                         !(self.status == RunningStatus::Running),
                         |start_button_ui| {
@@ -335,9 +311,7 @@ impl MainWindow {
         });
     }
 
-    /// 启动后台爆破任务
     fn start_bruteforce_task(&mut self, ctx: egui::Context) {
-        // 输入验证
         if self.jwt_burp_token.is_empty() {
             self.status = RunningStatus::Error;
             self.error_type = ErrorType::JwtTokenEmpty;
@@ -361,18 +335,15 @@ impl MainWindow {
 
         let jwt_token = self.jwt_burp_token.clone();
 
-        // 创建消息通道用于线程间通信
         let (tx, rx) = unbounded::<String>();
         let (stop_tx, stop_rx) = unbounded::<()>();
         self.tx = Some(tx.clone());
         self.rx = Some(rx);
         self.stop_tx = Some(stop_tx);
 
-        // 确保 `stop_rx` 可以被多个线程安全地共享，并包装成可选类型
         let stop_rx_arc = Arc::new(stop_rx);
         let optional_stop_rx = Some(stop_rx_arc);
 
-        // 根据UI选项创建组合生成器
         let generator = if self.use_user_charset {
             CombinationGenerator::new_with_charset(
                 self.min_len,
@@ -392,12 +363,10 @@ impl MainWindow {
             )
         };
 
-        // 启动后台线程执行耗时任务
         self.task_handle = Some(thread::spawn(move || {
             let found_key = generator.par_bridge().find_any(|key| {
-                // 发送正在尝试的密钥到主线程
                 let _ = tx.send(key.to_string());
-                // 验证JWT
+
                 verify_jwt_hs256_token(jwt_token.as_str(), key).is_some()
             });
             ctx.request_repaint();
@@ -406,18 +375,16 @@ impl MainWindow {
         self.status = RunningStatus::Running;
     }
 
-    /// 停止后台任务
     fn stop_bruteforce_task(&mut self) {
         if self.status == RunningStatus::Running {
             self.status = RunningStatus::Stopping;
-            // 发送停止信号到后台线程
+
             if let Some(tx) = self.stop_tx.take() {
                 let _ = tx.send(());
             }
         }
     }
 
-    /// 清空所有状态和输入
     fn clear_state(&mut self) {
         self.jwt_header = "".to_string();
         self.jwt_playload = "".to_string();
@@ -426,7 +393,7 @@ impl MainWindow {
         self.burped_key = "".to_string();
         self.status = RunningStatus::OK;
         self.error_type = ErrorType::None;
-        // 发送停止信号以确保后台线程退出
+
         if let Some(tx) = self.stop_tx.take() {
             let _ = tx.send(());
         }
@@ -434,17 +401,13 @@ impl MainWindow {
 }
 
 impl eframe::App for MainWindow {
-    /// 主要的更新函数，负责处理状态和渲染UI
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // 首先处理后台线程的消息和任务完成状态
         self.handle_channels(ctx);
 
-        // 根据运行状态，决定是否启用中央面板的UI
         let is_ui_enabled =
             self.status != RunningStatus::Running && self.status != RunningStatus::Stopping;
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // 使用 add_enabled_ui 方法来控制内容的启用/禁用状态，而不是 set_enabled
             ui.add_enabled_ui(is_ui_enabled, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     self.render_central_panel(ui);
@@ -452,7 +415,6 @@ impl eframe::App for MainWindow {
             });
         });
 
-        // 渲染底部面板
         TopBottomPanel::bottom("main").show(ctx, |ui| {
             self.render_bottom_panel(ui);
         });

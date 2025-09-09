@@ -10,15 +10,12 @@ use std::env;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// 待破解的 JWT 字符串
     #[arg(short, long)]
     token: String,
 
-    /// 密钥的最小长度
     #[arg(short = 'm', long = "min", default_value_t = 1)]
     min_length: usize,
 
-    /// 密钥的最大长度
     #[arg(short = 'x', long = "max", default_value_t = 10)]
     max_length: usize,
 }

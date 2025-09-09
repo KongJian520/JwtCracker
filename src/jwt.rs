@@ -105,7 +105,6 @@ pub fn verify_jwt_hs256_token(token: &str, secret_key: &str) -> Option<HashMap<S
     let decoded_payload_bytes = URL_SAFE_NO_PAD.decode(encoded_payload).ok()?;
     let payload: HashMap<String, Value> = from_slice(&decoded_payload_bytes).ok()?;
 
-    // 检查令牌是否过期
     if let Some(exp_value) = payload.get("exp") {
         if let Some(exp) = exp_value.as_u64() {
             let current_time = SystemTime::now()
