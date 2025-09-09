@@ -45,13 +45,13 @@ cargo build --release
 通过命令行参数指定要破解的 JWT 令牌和长度范围。
 
 ```sh
-./target/release/jwt-bruteforcer -t <要破解的JWT令牌> -m <最小长度> -x <最大长度>
+./target/release/JWTCracker.exe -t <要破解的JWT令牌> -m <最小长度> -x <最大长度>
 ```
 
 **示例**:
 
 ```sh
-./target/release/jwt-bruteforcer -t "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" -m 1 -x 10
+./target/release/JWTCracker.exe -t "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" -m 1 -x 10
 ```
 
 ### 依赖项
