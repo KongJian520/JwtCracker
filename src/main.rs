@@ -1,12 +1,71 @@
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use clap::Parser;
+use hmac::{Hmac, KeyInit, Mac};
 use indicatif::{ProgressBar, ProgressStyle};
-use num_bigint::{BigUint, ToBigUint};
-use num_traits::identities::Zero;
-use num_traits::ToPrimitive;
+use rand::Rng;
+use rayon::current_thread_index;
 use rayon::prelude::*;
+use serde_json::{from_slice, Value};
+use sha2::Sha256;
+use std::collections::HashMap;
 use std::iter::Iterator;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-// 我们使用之前实现的迭代器，它负责按需生成所有组合
-// （为完整性再次包含实现）
+// 使用 clap 定义命令行参数
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// 待破解的 JWT 字符串
+    #[arg(short, long)]
+    token: String,
+
+    /// 密钥的最小长度
+    #[arg(short = 'm', long, default_value_t = 1)]
+    min_length: usize,
+
+    /// 密钥的最大长度
+    #[arg(short = 'x', long, default_value_t = 10)]
+    max_length: usize,
+}
+
+fn base64url_encode<T: AsRef<[u8]>>(input: T) -> String {
+    URL_SAFE_NO_PAD.encode(input)
+}
+
+fn verify_jwt_hs256_token(token: &str, secret_key: &str) -> Option<HashMap<String, Value>> {
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let encoded_header = parts[0];
+    let encoded_payload = parts[1];
+    let encoded_signature = parts[2];
+    let signing_input = format!("{}.{}", encoded_header, encoded_payload);
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(secret_key.as_bytes()).expect("HMAC-SHA256无法创建");
+    mac.update(signing_input.as_bytes());
+    let expected_signature_bytes = mac.finalize().into_bytes();
+    let expected_signature = base64url_encode(expected_signature_bytes);
+    if expected_signature != encoded_signature {
+        return None;
+    }
+    let decoded_payload_bytes = URL_SAFE_NO_PAD.decode(encoded_payload).ok()?;
+    let payload: HashMap<String, Value> = from_slice(&decoded_payload_bytes).ok()?;
+    if let Some(exp_value) = payload.get("exp") {
+        if let Some(exp) = exp_value.as_u64() {
+            let current_time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            if exp < current_time {
+                return None;
+            }
+        }
+    }
+    Some(payload)
+}
+
+// 惰性迭代器，它不会一次性生成所有组合
 struct CombinationGenerator {
     charset: Vec<char>,
     current_length: usize,
@@ -32,6 +91,7 @@ impl CombinationGenerator {
     }
 }
 
+// 核心：实现 Iterator trait，使其能够按需生成下一个组合
 impl Iterator for CombinationGenerator {
     type Item = String;
 
@@ -65,52 +125,69 @@ impl Iterator for CombinationGenerator {
     }
 }
 
-// 计算所有长度的组合总数，用于设置进度条的上限
-fn calculate_total_combinations(min_len: u32, max_len: u32) -> BigUint {
-    let mut total: BigUint = Zero::zero();
-    let charset_size = 62.to_biguint().unwrap();
-
-    for len in min_len..=max_len {
-        let combinations_for_len = charset_size.pow(len);
-        total += combinations_for_len;
-    }
-    total
-}
-
 fn main() {
-    let min_length = 1;
-    let max_length = 5;
+    let args = Args::parse();
+    let token_to_crack = args.token.as_str();
+    let min_length = args.min_length;
+    let max_length = args.max_length;
+    const TICK_CHARS: &[&str] = &[
+        "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",               // 经典旋转器
+        " ▂▃▄▅▆▇█▇▆▅▄▃▂ ",          // 脉冲条
+        "|/-\\",                    // 简单旋转
+        "◐◓◑◒",                     // 圆形旋转
+        "▓▒░░▒▓",                   // 填充动画
+        "⠁⠂⠄⡀⢀⠠⠐⠈",                 // 点状进度
+        "⣾⣽⣻⢿⡿⣟⣯⣷",                 // 扇形旋转
+        "🌑🌒🌓🌔🌕🌖🌗🌘",         // 月相变化
+        "⬒⬔⬓⬕",                     // 方形旋转
+        "▖▘▝▗",                     // 小方块旋转
+        "◢◣◤◥",                     // 斜角旋转
+        "🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛", // 时钟动画
+        "⢀⣀⣄⣤⣦⣶⣷⣿⣷⣶⣦⣤⣄⣀",           // 三角形脉冲
+        "♠♣♥♦",                     // 扑克牌花色
+        "←↖↑↗→↘↓↙",                 // 指南针方向
+        "▉▊▋▌▍▎▏▎▍▌▋▊▉",            // 细条脉冲
+        "❘❙❚",                      // 竖线变化
+        "☰☱☲☳☴☵☶☷",                 // 八卦符号
+        "⌜⌝⌞⌟",                     // 角符号旋转
+        "⦾⦿",                       // 圆圈内点变化
+    ];
 
-    // 计算总任务数，它是一个 BigUint 类型
-    let total_combinations_biguint = calculate_total_combinations(min_length, max_length);
-
-    // 将 BigUint 转换为 u64，用于 ProgressBar。
-    // 如果总数超过 u64 的最大值，我们将使用 u64::MAX
-    let total_combinations_u64 = total_combinations_biguint.to_u64().unwrap_or(u64::MAX);
-
-    // 创建一个进度条，并使用转换后的 u64 总数
-    let bar = ProgressBar::new(total_combinations_u64);
-
-    // 修改样式模板，只显示百分比和已处理数量，不显示总数
+    // 从 tick 字符集中随机选择一个
+    let mut rng = rand::rng();
+    let random_tick_chars = TICK_CHARS[rng.random_range(0..TICK_CHARS.len())];
+    let bar = ProgressBar::new_spinner();
     bar.set_style(
         ProgressStyle::with_template(
-            "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {percent_precise}% {per_sec} {eta})",
+            "{spinner:.green}  {msg} | [{elapsed_precise}] {pos} {per_sec} ",
         )
         .unwrap()
-        .progress_chars("#>-"),
+        .tick_chars(random_tick_chars), // 应用随机 tick 字符
     );
 
-    let generator = CombinationGenerator::new(min_length as usize, max_length as usize);
+    println!("正在尝试破解 JWT 令牌...");
 
-    let found_combinations: Vec<String> = generator
-        .par_bridge()
-        .filter(|combination| {
-            bar.inc(1);
-            combination.contains('a')
-        })
-        .collect();
+    let generator = CombinationGenerator::new(min_length, max_length);
 
-    bar.finish_with_message("所有组合已生成并过滤完成！");
+    // 核心逻辑：使用 par_bridge() 将单线程迭代器转换为并行迭代器
+    // 然后直接在并行迭代器上使用 find_any()
+    let found_key = generator.par_bridge().find_any(|key| {
+        bar.inc(1);
+        if let Some(thread_id) = current_thread_index() {
+            if thread_id == 0 {
+                bar.set_message(key.clone());
+            }
+        }
+        verify_jwt_hs256_token(token_to_crack, key).is_some()
+    });
 
-    println!("总共找到 {} 个符合要求的组合。", found_combinations.len());
+    if let Some(key) = found_key {
+        bar.finish_with_message("破解成功！");
+        println!("\n=====================================");
+        println!("找到的密钥是: {}", key);
+        println!("=====================================");
+    } else {
+        bar.finish_with_message("未找到有效密钥。");
+        println!("\n在给定的长度范围内未找到有效密钥。");
+    }
 }
