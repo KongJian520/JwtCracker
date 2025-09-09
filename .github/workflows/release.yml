@@ -50,7 +50,7 @@ jobs:
           }
         shell: pwsh
 
-      # 步骤6：上传构建好的工件
+      # 6. 上传构建好的工件
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -88,13 +88,93 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
         shell: bash
 
-      # 步骤4：创建 GitHub Release 并附加所有工件
+      # 步骤4：生成 Release Notes 内容
+      - name: Generate Release Notes Body
+        id: release_body
+        run: |
+          # 读取模板文件
+          NOTES=$(cat RELEASE_NOTES.md)
+
+          # 创建表格头部
+          SHASUM_TABLE="| 文件名 | SHA256 值 |\n| :--- | :--- |"
+
+          # 遍历所有下载的工件并计算哈希值
+          for file in artifacts/*/*; do
+            filename=$(basename $file)
+            shasum=$(sha256sum "$file" | cut -d ' ' -f 1)
+            SHASUM_TABLE="$SHASUM_TABLE\n| $filename | \`$shasum\` |"
+          done
+
+          # 组合正文和表格
+          BODY="$NOTES\n\n## 文件校验\n\n为了验证下载文件的完整性，请使用以下 SHA256 校验和：\n$SHASUM_TABLE"
+          
+          # 将最终正文内容设置为输出
+          echo "release_body=$BODY" >> $GITHUB_OUTPUT
+
+      # 步骤5：创建 GitHub Release 并附加所有工件
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ env.VERSION }}
           name: Release v${{ env.VERSION }}
+          body: ${{ steps.release_body.outputs.release_body }}
           files: artifacts/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 新增作业：更新 README.md 文件
+  update_readme:
+    name: Update README
+    runs-on: ubuntu-latest
+    needs: create_release # 在发布完成后运行
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get latest release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Get Project Metadata
+        id: metadata
+        run: |
+          PROJECT_NAME=$(grep '^name = ' Cargo.toml | sed -E 's/name = "(.+)"/\1/')
+          VERSION=$(grep '^version = ' Cargo.toml | sed -E 's/version = "(.+)"/\1/')
+          echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Generate SHA256 Table
+        id: shasum
+        run: |
+          # 创建表格头部
+          echo "| 文件名 | SHA256 值 |" > shasums.md
+          echo "| :--- | :--- |" >> shasums.md
+
+          # 遍历所有下载的工件并计算哈希值
+          for file in artifacts/*/*; do
+            filename=$(basename $file)
+            shasum=$(sha256sum "$file" | cut -d ' ' -f 1)
+            echo "| $filename | \`$shasum\` |" >> shasums.md
+          done
+        shell: bash
+
+      - name: Update README.md
+        uses: actions-js/insert-md@v1.0.0
+        with:
+          file: README.md
+          section: "shasums"
+          content: ${{ steps.shasum.outputs.shasum }}
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "Auto-update checksums for v${{ env.VERSION }}" || echo "No changes to commit"
+          git push
+        shell: bash
