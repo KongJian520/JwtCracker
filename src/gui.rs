@@ -2,7 +2,6 @@
 use crate::cli::verify_jwt_hs256_token;
 use crate::combination_generator::CombinationGenerator;
 use crate::jwt::{decode_jwt, encode_jwt};
-use base64::Engine;
 use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
 use eframe::egui;
 use egui::{
@@ -310,24 +309,27 @@ impl MainWindow {
             ui.with_layout(Layout::right_to_left(Align::RIGHT), |child_ui| {
                 child_ui.horizontal(|button_ui| {
                     // 只有当状态不是Stopping时才启用按钮
-                    if self.status == RunningStatus::Stopping {
-                        button_ui.set_enabled(false);
-                    } else {
-                        button_ui.set_enabled(true);
-                    }
-
-                    // 启动按钮
-                    if button_ui.button("开始").clicked() {
-                        self.start_bruteforce_task(ctx_clone);
-                    }
+                    button_ui.add_enabled_ui(
+                        !(self.status == RunningStatus::Running),
+                        |start_button_ui| {
+                            if start_button_ui.button("开始").clicked() {
+                                self.start_bruteforce_task(ctx_clone);
+                            }
+                        },
+                    );
                     // 停止按钮
                     if button_ui.button("停止").clicked() {
                         self.stop_bruteforce_task();
                     }
                     // 清空按钮
-                    if button_ui.button("清空").clicked() {
-                        self.clear_state();
-                    }
+                    button_ui.add_enabled_ui(
+                        !(self.status == RunningStatus::Running),
+                        |start_button_ui| {
+                            if start_button_ui.button("清空").clicked() {
+                                self.clear_state();
+                            }
+                        },
+                    );
                 });
             });
         });
@@ -366,9 +368,18 @@ impl MainWindow {
         self.rx = Some(rx);
         self.stop_tx = Some(stop_tx);
 
+        // 确保 `stop_rx` 可以被多个线程安全地共享，并包装成可选类型
+        let stop_rx_arc = Arc::new(stop_rx);
+        let optional_stop_rx = Some(stop_rx_arc);
+
         // 根据UI选项创建组合生成器
         let generator = if self.use_user_charset {
-            CombinationGenerator::new_with_charset(self.min_len, self.max_len, &*self.user_charset)
+            CombinationGenerator::new_with_charset(
+                self.min_len,
+                self.max_len,
+                &*self.user_charset,
+                optional_stop_rx,
+            )
         } else {
             CombinationGenerator::new_with_options(
                 self.min_len,
@@ -377,17 +388,13 @@ impl MainWindow {
                 self.use_uppercase,
                 self.use_digits,
                 self.use_special,
+                optional_stop_rx,
             )
         };
 
         // 启动后台线程执行耗时任务
         self.task_handle = Some(thread::spawn(move || {
             let found_key = generator.par_bridge().find_any(|key| {
-                // 检查停止信号
-                if stop_rx.try_recv().is_ok() {
-                    ctx.request_repaint();
-                    return false;
-                }
                 // 发送正在尝试的密钥到主线程
                 let _ = tx.send(key.to_string());
                 // 验证JWT
@@ -449,6 +456,9 @@ impl eframe::App for MainWindow {
         TopBottomPanel::bottom("main").show(ctx, |ui| {
             self.render_bottom_panel(ui);
         });
+        if self.status == RunningStatus::Stopping {
+            MainWindow::stop_bruteforce_task(self)
+        }
     }
 }
 

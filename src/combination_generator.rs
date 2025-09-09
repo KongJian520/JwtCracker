@@ -8,10 +8,11 @@ pub struct CombinationGenerator {
     max_length: usize,
     indices: Vec<usize>,
     is_new_length: bool,
+    stop_rx: Option<Arc<Receiver<()>>>,
 }
 
 impl CombinationGenerator {
-    pub fn new(min_length: usize, max_length: usize, ) -> Self {
+    pub fn new(min_length: usize, max_length: usize,  stop_rx: Option<Arc<Receiver<()>>>,) -> Self {
         let charset: Vec<char> = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
             .chars()
             .collect();
@@ -22,13 +23,14 @@ impl CombinationGenerator {
             max_length,
             indices: Vec::new(),
             is_new_length: true,
+            stop_rx
         }
     }
     pub fn new_with_charset(
         min_length: usize,
         max_length: usize,
         charset: &str,
-
+        stop_rx: Option<Arc<Receiver<()>>>,
     ) -> Self {
         let charset: Vec<char> = charset.chars().collect();
         Self {
@@ -38,6 +40,7 @@ impl CombinationGenerator {
             max_length,
             indices: Vec::new(),
             is_new_length: true,
+            stop_rx
         }
     }
     pub fn new_with_options(
@@ -47,6 +50,7 @@ impl CombinationGenerator {
         use_uppercase: bool,
         use_digits: bool,
         use_special: bool,
+        stop_rx: Option<Arc<Receiver<()>>>,
     ) -> Self {
         let mut charset = String::new();
         if use_lowercase {
@@ -69,6 +73,7 @@ impl CombinationGenerator {
             max_length,
             indices: Vec::new(),
             is_new_length: true,
+            stop_rx
         }
     }
 }
@@ -77,8 +82,11 @@ impl Iterator for CombinationGenerator {
     type Item = String;
 
     fn next(&mut self) -> Option<Self::Item> {
-
-
+        if let Some(rx) = &self.stop_rx {
+            if rx.try_recv().is_ok() {
+                return None; // 收到停止信号，返回 None 终止迭代。
+            }
+        }
         // 如果当前长度超过了最大长度，则停止生成
         if self.current_length > self.max_length {
             return None;
