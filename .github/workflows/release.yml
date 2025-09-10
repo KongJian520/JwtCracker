@@ -1,4 +1,4 @@
-name: Combined Release Workflow
+name: 编译和发布
 
 on:
   workflow_dispatch:
