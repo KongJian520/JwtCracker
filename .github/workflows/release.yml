@@ -1,4 +1,4 @@
-name: 编译并发布
+name: Combined Release Workflow
 
 on:
   workflow_dispatch:
@@ -39,19 +39,39 @@ jobs:
       - name: Get Project Metadata
         id: metadata
         run: |
-          PROJECT_NAME=$(grep '^name = ' Cargo.toml | sed -E 's/name = "(.+)"/\1/')
-          VERSION=$(grep '^version = ' Cargo.toml | sed -E 's/version = "(.+)"/\1/')
-          echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          # 使用更可靠的方法提取项目名称和版本
+          PROJECT_NAME=$(grep -E '^name\s*=' Cargo.toml | head -1 | sed -E 's/name\s*=\s*"([^"]+)".*/\1/')
+          VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
+          
+          # 确保值不包含换行符或特殊字符
+          PROJECT_NAME=$(echo "$PROJECT_NAME" | tr -d '\n\r')
+          VERSION=$(echo "$VERSION" | tr -d '\n\r')
+          
+          # 使用正确的格式设置环境变量
+          echo "PROJECT_NAME=$PROJECT_NAME" | tee -a $GITHUB_ENV
+          echo "VERSION=$VERSION" | tee -a $GITHUB_ENV
+          
+          # 添加调试信息
+          echo "Extracted PROJECT_NAME: $PROJECT_NAME"
+          echo "Extracted VERSION: $VERSION"
 
       - name: Rename executables
         run: |
+          # 使用更安全的重命名方法
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            mv "target/release/JwtCrackerGUI.exe" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI.exe"
-            mv "target/release/JwtCrackerCLI.exe" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI.exe"
+            if [ -f "target/release/JwtCrackerGUI.exe" ]; then
+              mv "target/release/JwtCrackerGUI.exe" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI.exe"
+            fi
+            if [ -f "target/release/JwtCrackerCLI.exe" ]; then
+              mv "target/release/JwtCrackerCLI.exe" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI.exe"
+            fi
           else
-            mv "target/release/JwtCrackerGUI" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI"
-            mv "target/release/JwtCrackerCLI" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI"
+            if [ -f "target/release/JwtCrackerGUI" ]; then
+              mv "target/release/JwtCrackerGUI" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI"
+            fi
+            if [ -f "target/release/JwtCrackerCLI" ]; then
+              mv "target/release/JwtCrackerCLI" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI"
+            fi
           fi
 
       - name: Upload Artifact
@@ -81,7 +101,8 @@ jobs:
       - name: Get Project Version
         id: version
         run: |
-          VERSION=$(grep '^version = ' Cargo.toml | sed -E 's/version = "(.+)"/\1/')
+          VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
+          VERSION=$(echo "$VERSION" | tr -d '\n\r')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Generate Release Notes Body
@@ -90,9 +111,11 @@ jobs:
           SHASUM_TABLE=$(echo -e "| 文件名 | SHA256 值 |\n| :--- | :--- |")
           
           for file in artifacts/*/*; do
-            filename=$(basename "$file")
-            shasum=$(sha256sum "$file" | cut -d ' ' -f 1)
-            SHASUM_TABLE=$(echo -e "$SHASUM_TABLE\n| $filename | \`$shasum\` |")
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              shasum=$(sha256sum "$file" | cut -d ' ' -f 1)
+              SHASUM_TABLE=$(echo -e "$SHASUM_TABLE\n| $filename | \`$shasum\` |")
+            fi
           done
 
           BODY=$(echo -e "## 文件校验\n\n为了验证下载文件的完整性，请使用以下 SHA256 校验和：\n\n$SHASUM_TABLE")
