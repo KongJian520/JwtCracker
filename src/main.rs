@@ -1,4 +1,5 @@
 #![windows_subsystem = "windows"]
+mod Spinner;
 mod cli;
 mod combination_generator;
 mod gui;
