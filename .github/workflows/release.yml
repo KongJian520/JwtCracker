@@ -32,15 +32,15 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      # 步骤3：设置 Rust 工具链
+      # 3. 设置 Rust 工具链
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # 步骤4：构建项目（发布模式），同时构建两个二进制文件
+      # 4. 构建项目（发布模式），同时构建两个二进制文件
       - name: Build project
         run: cargo build --release --all-features --bins
 
-      # 步骤5：获取项目元数据（项目名和版本号）
+      # 5. 获取项目元数据（项目名和版本号）
       - name: Get Project Metadata
         id: metadata
         run: |
@@ -48,9 +48,8 @@ jobs:
           VERSION=$(grep '^version = ' Cargo.toml | sed -E 's/version = "(.+)"/\1/')
           echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-        shell: bash
 
-      # 步骤6：重命名两个可执行文件
+      # 6. 重命名两个可执行文件
       - name: Rename executables
         run: |
           if ("${{ matrix.os }}" -eq "windows-latest") {
@@ -82,25 +81,24 @@ jobs:
       contents: write
 
     steps:
-      # 步骤1：检出仓库代码
+      # 1. 检出仓库代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 步骤2：下载所有工件
+      # 2. 下载所有工件
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
 
-      # 步骤3：获取项目版本号
+      # 3. 获取项目版本号
       - name: Get Project Version
         id: version
         run: |
           VERSION=$(grep '^version = ' Cargo.toml | sed -E 's/version = "(.+)"/\1/')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-        shell: bash
 
-      # 步骤4：生成 Release Notes 内容
+      # 4. 生成 Release Notes 内容
       - name: Generate Release Notes Body
         id: release_body
         run: |
@@ -122,7 +120,7 @@ jobs:
           echo "$BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # 步骤5：创建 GitHub Release 并附加所有工件
+      # 5. 创建 GitHub Release 并附加所有工件
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1
