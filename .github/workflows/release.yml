@@ -1,4 +1,4 @@
-name: Combined Release Workflow
+name: 编译和发布
 
 on:
   workflow_dispatch:
@@ -14,8 +14,10 @@ jobs:
         include:
           - os: ubuntu-latest
             extension: ""
+            shell: bash
           - os: windows-latest
             extension: ".exe"
+            shell: pwsh
 
     steps:
       - name: Checkout repository
@@ -38,41 +40,64 @@ jobs:
 
       - name: Get Project Metadata
         id: metadata
+        shell: ${{ matrix.shell }}
         run: |
-          # 使用更可靠的方法提取项目名称和版本
-          PROJECT_NAME=$(grep -E '^name\s*=' Cargo.toml | head -1 | sed -E 's/name\s*=\s*"([^"]+)".*/\1/')
-          VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
+          # 根据操作系统使用不同的方法提取元数据
+          if ("${{ matrix.os }}" -eq "windows-latest") {
+            # Windows 方法
+            $content = Get-Content Cargo.toml
+            $nameLine = $content | Where-Object { $_ -match '^name\s*=\s*"' }
+            $versionLine = $content | Where-Object { $_ -match '^version\s*=\s*"' }
           
-          # 确保值不包含换行符或特殊字符
-          PROJECT_NAME=$(echo "$PROJECT_NAME" | tr -d '\n\r')
-          VERSION=$(echo "$VERSION" | tr -d '\n\r')
+            $PROJECT_NAME = $nameLine -replace '^name\s*=\s*"([^"]+)".*', '$1'
+            $VERSION = $versionLine -replace '^version\s*=\s*"([^"]+)".*', '$1'
           
-          # 使用正确的格式设置环境变量
-          echo "PROJECT_NAME=$PROJECT_NAME" | tee -a $GITHUB_ENV
-          echo "VERSION=$VERSION" | tee -a $GITHUB_ENV
+            # 设置环境变量
+            Write-Output "PROJECT_NAME=$PROJECT_NAME" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            Write-Output "VERSION=$VERSION" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           
-          # 添加调试信息
-          echo "Extracted PROJECT_NAME: $PROJECT_NAME"
-          echo "Extracted VERSION: $VERSION"
+            # 调试信息
+            Write-Output "Extracted PROJECT_NAME: $PROJECT_NAME"
+            Write-Output "Extracted VERSION: $VERSION"
+          } else {
+            # Linux 方法
+            PROJECT_NAME=$(grep -E '^name\s*=' Cargo.toml | head -1 | sed -E 's/name\s*=\s*"([^"]+)".*/\1/')
+            VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
+          
+            # 确保值不包含换行符或特殊字符
+            PROJECT_NAME=$(echo "$PROJECT_NAME" | tr -d '\n\r')
+            VERSION=$(echo "$VERSION" | tr -d '\n\r')
+          
+            # 使用正确的格式设置环境变量
+            echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+          
+            # 添加调试信息
+            echo "Extracted PROJECT_NAME: $PROJECT_NAME"
+            echo "Extracted VERSION: $VERSION"
+          }
 
       - name: Rename executables
+        shell: ${{ matrix.shell }}
         run: |
-          # 使用更安全的重命名方法
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            if [ -f "target/release/JwtCrackerGUI.exe" ]; then
-              mv "target/release/JwtCrackerGUI.exe" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI.exe"
-            fi
-            if [ -f "target/release/JwtCrackerCLI.exe" ]; then
-              mv "target/release/JwtCrackerCLI.exe" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI.exe"
-            fi
-          else
+          # 根据操作系统使用不同的重命名方法
+          if ("${{ matrix.os }}" -eq "windows-latest") {
+            # Windows 方法
+            if (Test-Path "target\release\JwtCrackerGUI.exe") {
+              Move-Item "target\release\JwtCrackerGUI.exe" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI.exe"
+            }
+            if (Test-Path "target\release\JwtCrackerCLI.exe") {
+              Move-Item "target\release\JwtCrackerCLI.exe" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI.exe"
+            }
+          } else {
+            # Linux 方法
             if [ -f "target/release/JwtCrackerGUI" ]; then
               mv "target/release/JwtCrackerGUI" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI"
             fi
             if [ -f "target/release/JwtCrackerCLI" ]; then
               mv "target/release/JwtCrackerCLI" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI"
             fi
-          fi
+          }
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
