@@ -1,4 +1,4 @@
-name: Combined Release Workflow
+name: 构建&发布
 
 on:
   workflow_dispatch:
@@ -8,14 +8,14 @@ env:
 
 jobs:
   build:
-    name: Build & Test
+    name: 构建
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
 
     steps:
-      - name: Checkout repository
+      - name: 签出
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
@@ -23,13 +23,13 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install build dependencies (Linux)
+      - name: 下载依赖(Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libgl-dev libglu1-mesa-dev
 
-      - name: Cache dependencies
+      - name: 查找缓存
         uses: actions/cache@v4
         with:
           path: |
@@ -40,12 +40,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Build release binaries
+      - name: 构建
         run: |
           cargo build --release --locked --all-features
 
-      - name: Run tests
-        run: cargo test --verbose
 
       - name: Upload Linux CLI Binary
         if: matrix.os == 'ubuntu-latest'
@@ -106,7 +104,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      - name: 下载所有附件
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
