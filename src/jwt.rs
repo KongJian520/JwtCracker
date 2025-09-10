@@ -1,10 +1,9 @@
 use crate::gui::{ErrorType, MainWindow};
-use base64::engine::general_purpose;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use hmac::{Hmac, KeyInit, Mac};
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
-use serde_json::{from_slice, from_str, Value};
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
+use serde_json::{Value, from_slice, from_str};
 use sha2::Sha256;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -14,36 +13,37 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub fn decode_jwt(main_window: &mut MainWindow) {
     let parts: Vec<&str> = main_window.jwt_burp_token.split('.').collect();
     if parts.len() == 3 {
-        let decoded_header_result = general_purpose::URL_SAFE_NO_PAD.decode(parts[0]);
-        let decoded_payload_result = general_purpose::URL_SAFE_NO_PAD.decode(parts[1]);
+        let decoded_header_result = URL_SAFE_NO_PAD.decode(parts[0]);
+        let decoded_payload_result = URL_SAFE_NO_PAD.decode(parts[1]);
 
         if let (Ok(decoded_header_bytes), Ok(decoded_payload_bytes)) =
             (decoded_header_result, decoded_payload_result)
         {
             if let Ok(header_json) = serde_json::from_slice::<Value>(&decoded_header_bytes) {
-                main_window.jwt_header = serde_json::to_string_pretty(&header_json)
+                main_window.jwt_decoded_header = serde_json::to_string_pretty(&header_json)
                     .unwrap_or_else(|_| String::from_utf8_lossy(&decoded_header_bytes).to_string());
             } else {
-                main_window.jwt_header = String::from_utf8_lossy(&decoded_header_bytes).to_string();
+                main_window.jwt_decoded_header =
+                    String::from_utf8_lossy(&decoded_header_bytes).to_string();
             }
 
             if let Ok(payload_json) = serde_json::from_slice::<Value>(&decoded_payload_bytes) {
-                main_window.jwt_playload = serde_json::to_string_pretty(&payload_json)
+                main_window.jwt_decoded_payload = serde_json::to_string_pretty(&payload_json)
                     .unwrap_or_else(|_| {
                         String::from_utf8_lossy(&decoded_payload_bytes).to_string()
                     });
             } else {
-                main_window.jwt_playload =
+                main_window.jwt_decoded_payload =
                     String::from_utf8_lossy(&decoded_payload_bytes).to_string();
             }
         } else {
-            main_window.jwt_header.clear();
-            main_window.jwt_playload.clear();
+            main_window.jwt_decoded_header.clear();
+            main_window.jwt_decoded_payload.clear();
             main_window.error_type = ErrorType::JwtTokenFormatError;
         }
     } else {
-        main_window.jwt_header.clear();
-        main_window.jwt_playload.clear();
+        main_window.jwt_decoded_header.clear();
+        main_window.jwt_decoded_payload.clear();
         main_window.error_type = ErrorType::JwtTokenFormatError;
     }
 }
@@ -51,8 +51,8 @@ pub fn decode_jwt(main_window: &mut MainWindow) {
 /// 使用爆破出的密钥对JWT进行签名并更新UI
 /// 参数: main_window - 对MainWindow的可变引用
 pub fn encode_jwt(main_window: &mut MainWindow) {
-    let header_result: Result<Value, _> = from_str(&main_window.jwt_header);
-    let payload_result: Result<Value, _> = from_str(&main_window.jwt_playload);
+    let header_result: Result<Value, _> = from_str(&main_window.jwt_decoded_header);
+    let payload_result: Result<Value, _> = from_str(&main_window.jwt_decoded_payload);
 
     if let (Ok(header_json), Ok(payload_json)) = (header_result, payload_result) {
         let alg_str = header_json["alg"].as_str().unwrap_or("HS256");
@@ -68,8 +68,12 @@ pub fn encode_jwt(main_window: &mut MainWindow) {
 
         let mut header = Header::new(algorithm);
         header.typ = header_json["typ"].as_str().map(String::from);
+        let mut full_key = String::new();
+        full_key.push_str(&main_window.burped_key_start);
+        full_key.push_str(&main_window.burped_key);
+        full_key.push_str(&main_window.burped_key_end);
 
-        let encoding_key = EncodingKey::from_secret(main_window.burped_key.as_bytes());
+        let encoding_key = EncodingKey::from_secret(full_key.as_bytes());
 
         if let Ok(token) = encode(&header, &payload_json, &encoding_key) {
             main_window.jwt_singed_token = token;

@@ -1,14 +1,15 @@
 use crate::cli::verify_jwt_hs256_token;
 use crate::combination_generator::CombinationGenerator;
 use crate::jwt::{decode_jwt, encode_jwt};
-use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
+use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
 use eframe::egui;
 use egui::{
-    epaint, Align, Checkbox, DragValue, FontData, FontDefinitions, Label, Layout, RichText,
-    TextEdit, TextStyle, TopBottomPanel,
+    Align, CentralPanel, Checkbox, DragValue, FontData, FontDefinitions, Label, Layout, RichText,
+    TextEdit, TopBottomPanel, epaint,
 };
-use egui_extras::syntax_highlighting::{highlight, CodeTheme};
+use egui_extras::syntax_highlighting::{CodeTheme, highlight};
 use rayon::iter::{ParallelBridge, ParallelIterator};
+use std::ops::Add;
 use std::sync::Arc;
 use std::thread;
 
@@ -23,16 +24,21 @@ pub(crate) struct MainWindow {
     use_digits: bool,
     use_special: bool,
     use_user_charset: bool,
-    pub(crate) jwt_playload: String,
-    pub(crate) jwt_header: String,
+    pub(crate) jwt_decoded_payload: String,
+    pub(crate) jwt_decoded_header: String,
     pub(crate) jwt_burp_token: String,
     pub(crate) jwt_singed_token: String,
+
+    pub(crate) burped_key_start: String,
     pub(crate) burped_key: String,
+    pub(crate) burped_key_end: String,
+
     pub(crate) error_type: ErrorType,
     task_handle: Option<thread::JoinHandle<Option<String>>>,
     tx: Option<Sender<String>>,
     rx: Option<Receiver<String>>,
     stop_tx: Option<Sender<()>>,
+    show_about_window: bool,
 }
 
 /// 应用程序运行状态枚举
@@ -48,6 +54,7 @@ enum RunningStatus {
 }
 
 /// 错误类型枚举
+#[derive(PartialEq)]
 pub(crate) enum ErrorType {
     None,
     UserCharsetEmpty,
@@ -71,15 +78,18 @@ impl Default for MainWindow {
             use_uppercase: true,
             use_digits: true,
             use_special: false,
-            jwt_playload: "".to_string(),
-            jwt_header: "".to_string(),
+            jwt_decoded_payload: "".to_string(),
+            jwt_decoded_header: "".to_string(),
             jwt_burp_token: "".to_string(),
             jwt_singed_token: "".to_string(),
+            burped_key_start: "".to_string(),
             burped_key: "".to_string(),
+            burped_key_end: "".to_string(),
             error_type: ErrorType::None,
             task_handle: None,
             tx: None,
             rx: None,
+            show_about_window: false,
         }
     }
 }
@@ -111,7 +121,12 @@ impl MainWindow {
                         encode_jwt(self);
                     }
                     Ok(None) => {
-                        if self.status == RunningStatus::Stopping {
+                        if self.error_type == ErrorType::None {
+                            if self.status == RunningStatus::Stopped {
+                                self.status = RunningStatus::OK;
+                            }
+                        };
+                        if (self.status == RunningStatus::Stopping) {
                             self.status = RunningStatus::Stopped;
                         } else {
                             self.status = RunningStatus::Error;
@@ -128,25 +143,18 @@ impl MainWindow {
     }
 
     fn render_central_panel(&mut self, ui: &mut egui::Ui) {
-        let ui_width = ui.available_width();
-
         ui.horizontal(|ui| {
             ui.heading("选择字符集:");
             ui.checkbox(&mut self.use_user_charset, "自定义字符集");
-            ui.add(Label::new("爆破长度:从"));
-            ui.add(DragValue::new(&mut self.min_len));
-            ui.add(Label::new("到"));
-            ui.add(DragValue::new(&mut self.max_len));
-            if self.min_len > self.max_len {
-                self.min_len = self.max_len;
-            }
         });
-
         ui.horizontal(|ui| {
             if self.use_user_charset {
-                ui.add(
-                    TextEdit::singleline(&mut self.user_charset).hint_text("请输入自定义字符集"),
-                );
+                ui.group(|child_ui| {
+                    child_ui.add(
+                        TextEdit::singleline(&mut self.user_charset)
+                            .hint_text("请输入自定义字符集"),
+                    )
+                });
             } else {
                 ui.group(|child_ui| {
                     child_ui
@@ -163,12 +171,47 @@ impl MainWindow {
                         .on_hover_text("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~");
                 });
             }
+        });
+        ui.horizontal(|ui| {
             ui.group(|chile_ui| {
-                chile_ui.add(
-                    TextEdit::singleline(&mut self.burped_key)
-                        .desired_width(self.max_len as f32 * 10.0),
-                )
-            })
+                chile_ui.add(Label::new("爆破长度:从"));
+                chile_ui.add(DragValue::new(&mut self.min_len));
+                chile_ui.add(Label::new("到"));
+                chile_ui.add(DragValue::new(&mut self.max_len));
+                if self.min_len > self.max_len {
+                    self.min_len = self.max_len;
+                }
+            });
+            if (self.status == RunningStatus::OK) | (self.status == RunningStatus::Stopped) {
+                ui.group(|chile_ui| {
+                    chile_ui
+                        .add(
+                            TextEdit::singleline(&mut self.burped_key_start)
+                                .desired_width(self.max_len as f32 * 10.0),
+                        )
+                        .on_hover_text("密钥前缀");
+                    chile_ui
+                        .add(
+                            TextEdit::singleline(&mut self.burped_key)
+                                .desired_width(self.max_len as f32 * 10.0),
+                        )
+                        .on_hover_text("准备爆破部分");
+                    chile_ui
+                        .add(
+                            TextEdit::singleline(&mut self.burped_key_end)
+                                .desired_width(self.max_len as f32 * 10.0),
+                        )
+                        .on_hover_text("密钥后缀");
+                });
+            } else {
+                ui.label(
+                    RichText::new(format!(
+                        "{}{}{}",
+                        self.burped_key_start, self.burped_key, self.burped_key_end
+                    ))
+                    .color(egui::Color32::DARK_BLUE),
+                );
+            }
         });
         ui.separator();
 
@@ -183,72 +226,67 @@ impl MainWindow {
             layout_job.wrap.max_width = wrap_width;
             ui.fonts(|f| f.layout_job(layout_job))
         };
-
-        if ui
-            .add(
-                TextEdit::multiline(&mut self.jwt_burp_token)
-                    .font(TextStyle::Monospace)
-                    .code_editor()
-                    .desired_rows(6)
-                    .lock_focus(true)
-                    .desired_width(ui_width)
-                    .layouter(&mut layouter)
-                    .hint_text("Please input the JWT token to be burped"),
-            )
-            .on_hover_text("预想要爆破的JWT字符串")
-            .changed()
-        {
-            decode_jwt(self);
-        };
-
-        ui.horizontal(|ui| {
-            if ui
+        ui.group(|jwt_ui| {
+            if jwt_ui
                 .add(
-                    TextEdit::multiline(&mut self.jwt_header)
-                        .font(TextStyle::Monospace)
+                    egui::TextEdit::multiline(&mut self.jwt_burp_token)
+                        .font(egui::TextStyle::Monospace)
                         .code_editor()
                         .desired_rows(6)
                         .lock_focus(true)
-                        .desired_width(ui_width * 0.49)
-                        .layouter(&mut layouter),
+                        .desired_width(jwt_ui.available_width())
+                        .layouter(&mut layouter)
+                        .hint_text("Please input the JWT token to be burped"),
                 )
-                .on_hover_text("Head部分")
+                .on_hover_text("预想要爆破的JWT字符串")
                 .changed()
             {
-                if self.status == RunningStatus::Found {
-                    encode_jwt(self);
-                }
+                decode_jwt(self);
             };
 
-            if ui
+            // 使用 with_columns 方法创建两列，每列平分宽度
+            jwt_ui.columns(2, |columns| {
+                // 第一列
+                columns[0]
+                    .add(
+                        egui::TextEdit::multiline(&mut self.jwt_decoded_header)
+                            .font(egui::TextStyle::Monospace)
+                            .code_editor()
+                            .desired_rows(6)
+                            .lock_focus(true)
+                            .desired_width(columns[0].available_width()) // 将宽度设置为列的可用宽度
+                            .layouter(&mut layouter),
+                    )
+                    .on_hover_text("Head部分")
+                    .changed();
+
+                // 第二列
+                columns[1]
+                    .add(
+                        egui::TextEdit::multiline(&mut self.jwt_decoded_payload)
+                            .font(egui::TextStyle::Monospace)
+                            .code_editor()
+                            .desired_rows(6)
+                            .lock_focus(true)
+                            .desired_width(columns[1].available_width()) // 将宽度设置为列的可用宽度
+                            .layouter(&mut layouter),
+                    )
+                    .on_hover_text("Payload部分")
+                    .changed();
+            });
+
+            jwt_ui
                 .add(
-                    TextEdit::multiline(&mut self.jwt_playload)
-                        .font(TextStyle::Monospace)
+                    egui::TextEdit::multiline(&mut self.jwt_singed_token)
+                        .font(egui::TextStyle::Monospace)
                         .code_editor()
                         .desired_rows(6)
                         .lock_focus(true)
-                        .desired_width(ui_width * 0.49)
+                        .desired_width(jwt_ui.available_width())
                         .layouter(&mut layouter),
                 )
-                .on_hover_text("Payload部分")
-                .changed()
-            {
-                if self.status == RunningStatus::Found {
-                    encode_jwt(self);
-                }
-            };
+                .on_hover_text("使用爆破出来的密钥的JWT签名结果");
         });
-
-        ui.add(
-            TextEdit::multiline(&mut self.jwt_singed_token)
-                .font(TextStyle::Monospace)
-                .code_editor()
-                .desired_rows(6)
-                .lock_focus(true)
-                .desired_width(ui_width)
-                .layouter(&mut layouter),
-        )
-        .on_hover_text("使用爆破出来的密钥的JWT签名结果");
     }
 
     fn render_bottom_panel(&mut self, ui: &mut egui::Ui) {
@@ -269,17 +307,24 @@ impl MainWindow {
             }
             RunningStatus::Stopping => RichText::new("正在停止...").color(egui::Color32::YELLOW),
             RunningStatus::Stopped => RichText::new("已经停止").color(egui::Color32::GRAY),
-            RunningStatus::Found => RichText::new(format!("密钥已找到: {}", &self.burped_key))
-                .color(egui::Color32::BLUE),
+            RunningStatus::Found => {
+                let mut result = String::new(); // 创建一个可变的新字符串
+                result.push_str(&self.burped_key_start); // 追加第一个字符串切片
+                result.push_str(&self.burped_key); // 追加第二个字符串切片
+                result.push_str(&self.burped_key_end); // 追加第三个字符串切片
+                RichText::new(format!("密钥已找到: {}", result)).color(egui::Color32::BLUE)
+            }
         };
 
         let ctx_clone = ui.ctx().clone();
 
         ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-            if self.status == RunningStatus::Running || self.status == RunningStatus::Stopping {
-                ui.add(egui::Spinner::new());
+            if self.status == RunningStatus::Running {
+                ui.add(crate::Spinner::Spinner::new().speed(2.0).clockwise(true));
             }
-
+            if self.status == RunningStatus::Stopping {
+                ui.add(crate::Spinner::Spinner::new().speed(3.0).clockwise(false));
+            }
             ui.add(Label::new(status_text));
 
             ui.with_layout(Layout::right_to_left(Align::RIGHT), |child_ui| {
@@ -361,12 +406,13 @@ impl MainWindow {
                 optional_stop_rx,
             )
         };
-
+        let burped_key_start = self.burped_key_start.clone();
+        let burped_key_end = self.burped_key_end.clone();
         self.task_handle = Some(thread::spawn(move || {
             let found_key = generator.par_bridge().find_any(|key| {
+                let new_key = format!("{}{}{}", burped_key_start, key, burped_key_end);
                 let _ = tx.send(key.to_string());
-
-                verify_jwt_hs256_token(jwt_token.as_str(), key).is_some()
+                verify_jwt_hs256_token(jwt_token.as_str(), new_key.as_str()).is_some()
             });
             ctx.request_repaint();
             found_key.map(|s| s.to_owned())
@@ -385,8 +431,8 @@ impl MainWindow {
     }
 
     fn clear_state(&mut self) {
-        self.jwt_header = "".to_string();
-        self.jwt_playload = "".to_string();
+        self.jwt_decoded_header = "".to_string();
+        self.jwt_decoded_payload = "".to_string();
         self.jwt_burp_token = "".to_string();
         self.jwt_singed_token = "".to_string();
         self.burped_key = "".to_string();
@@ -405,20 +451,40 @@ impl eframe::App for MainWindow {
 
         let is_ui_enabled =
             self.status != RunningStatus::Running && self.status != RunningStatus::Stopping;
-
-        egui::CentralPanel::default().show(ctx, |ui| {
+        TopBottomPanel::top("about").show(ctx, |ui| {
+            ui.menu_button("菜单", |menu_ui| {
+                if menu_ui.button("关于").clicked() {
+                    self.show_about_window = true;
+                    menu_ui.close(); // 关闭菜单
+                }
+                // menu_ui.separator();
+            })
+        });
+        CentralPanel::default().show(ctx, |ui| {
             ui.add_enabled_ui(is_ui_enabled, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     self.render_central_panel(ui);
                 });
             });
         });
-
-        TopBottomPanel::bottom("main").show(ctx, |ui| {
+        TopBottomPanel::bottom("config").show(ctx, |ui| {
             self.render_bottom_panel(ui);
         });
         if self.status == RunningStatus::Stopping {
             MainWindow::stop_bruteforce_task(self)
+        }
+        if self.show_about_window {
+            egui::Window::new("关于")
+                .open(&mut self.show_about_window)
+                .resizable(false)
+                .anchor(egui::Align2::LEFT_BOTTOM, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.label("作者: [KongJianGhost]");
+                    ui.add_space(8.0);
+                    ui.label("喜欢的话点个Star吧");
+                    ui.add_space(8.0);
+                    ui.hyperlink("https://github.com/KongJian520/JwtCracke");
+                });
         }
     }
 }
@@ -442,7 +508,7 @@ fn load_fonts() -> FontDefinitions {
 pub fn show_gui() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([400.0, 400.0])
+            .with_inner_size([400.0, 450.0])
             .with_icon(
                 eframe::icon_data::from_png_bytes(include_bytes!("assest/icons/icon.png"))
                     .expect("Failed to load icon"),
