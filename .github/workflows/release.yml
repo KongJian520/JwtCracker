@@ -47,7 +47,7 @@ jobs:
       - name: Run tests
         run: cargo test --verbose
 
-      - name: Upload Linux Binary
+      - name: Upload Linux CLI Binary
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
@@ -55,7 +55,15 @@ jobs:
           path: target/release/JwtCrackerCLI
           if-no-files-found: error
 
-      - name: Upload Windows Binary
+      - name: Upload Linux GUI Binary
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: JWTCracker-linux
+          path: target/release/JwtCrackerGUI
+          if-no-files-found: error
+
+      - name: Upload Windows CLI Binary
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
@@ -63,12 +71,28 @@ jobs:
           path: target/release/JwtCrackerCLI.exe
           if-no-files-found: error
 
-      - name: Upload macOS Binary
+      - name: Upload Windows GUI Binary
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: JWTCracker-windows
+          path: target/release/JwtCrackerGUI.exe
+          if-no-files-found: error
+
+      - name: Upload macOS Cli Binary
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
           name: JWTCracker-macos
           path: target/release/JwtCrackerCLI
+          if-no-files-found: error
+
+      - name: Upload macOS GUI Binary
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: JWTCracker-macos
+          path: target/release/JwtCrackerGUI
           if-no-files-found: error
 
   create_release:
