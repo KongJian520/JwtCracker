@@ -10,6 +10,8 @@ jobs:
   build:
     name: 构建
     runs-on: ${{ matrix.os }}
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest ]
@@ -54,21 +56,21 @@ jobs:
           cargo build --release --locked --all-features
 
       - name: 获取项目版本
-        id: version
+        id: get-version
         run: |
           VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: 重命名并上传CLI二进制文件
         uses: actions/upload-artifact@v4
         with:
-          name: JWTCracker-${{ matrix.platform }}-${{ matrix.arch }}-CLI-v${{ env.VERSION }}
+          name: JWTCracker-${{ matrix.platform }}-${{ matrix.arch }}-CLI-v${{ steps.get-version.outputs.version }}
           path: target/release/JwtCrackerCLI${{ matrix.extension }}
 
       - name: 重命名并上传GUI二进制文件
         uses: actions/upload-artifact@v4
         with:
-          name: JWTCracker-${{ matrix.platform }}-${{ matrix.arch }}-GUI-v${{ env.VERSION }}
+          name: JWTCracker-${{ matrix.platform }}-${{ matrix.arch }}-GUI-v${{ steps.get-version.outputs.version }}
           path: target/release/JwtCrackerGUI${{ matrix.extension }}
 
   create_release:
@@ -81,21 +83,6 @@ jobs:
     steps:
       - name: 签出
         uses: actions/checkout@v4
-
-      - name: 获取项目版本
-        id: version
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-      - name: 获取项目版本
-        id: version
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          $VERSION = (Get-Content Cargo.toml | Select-String -Pattern '^version\s*=') -replace '^version\s*=\s*"([^"]+)".*$', '$1'
-          echo "VERSION=$VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
 
       - name: 下载所有附件
         uses: actions/download-artifact@v4
@@ -110,7 +97,6 @@ jobs:
         run: |
           SHASUM_TABLE=$(echo -e "| 文件名 | SHA256 值 |\n| :--- | :--- |")
           
-          # 找到所有下载的二进制文件并计算哈希值
           for file_dir in artifacts/*; do
             if [ -d "$file_dir" ]; then
               for file in "$file_dir"/*; do
@@ -131,8 +117,8 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ env.VERSION }}
-          name: Release v${{ env.VERSION }}
+          tag_name: v${{ needs.build.outputs.version }}
+          name: Release v${{ needs.build.outputs.version }}
           body: ${{ steps.release_body.outputs.body }}
           files: artifacts/*/*
         env:
