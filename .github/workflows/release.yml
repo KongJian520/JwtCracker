@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        os: [ ubuntu-latest, windows-latest ]
 
     steps:
       - name: 签出
@@ -44,7 +44,6 @@ jobs:
         run: |
           cargo build --release --locked --all-features
 
-
       - name: Upload Linux CLI Binary
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
@@ -75,22 +74,6 @@ jobs:
         with:
           name: JWTCracker-windows--GUI
           path: target/release/JwtCrackerGUI.exe
-          if-no-files-found: error
-
-      - name: Upload macOS Cli Binary
-        if: matrix.os == 'macos-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: JWTCracker-macos-CLI
-          path: target/release/JwtCrackerCLI
-          if-no-files-found: error
-
-      - name: Upload macOS GUI Binary
-        if: matrix.os == 'macos-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: JWTCracker-macos-GUI
-          path: target/release/JwtCrackerGUI
           if-no-files-found: error
 
   create_release:
