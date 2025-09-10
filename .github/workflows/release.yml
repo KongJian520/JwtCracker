@@ -37,6 +37,8 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Build release binaries
         run: |
@@ -85,19 +87,31 @@ jobs:
         with:
           path: ./artifacts
 
+      - name: List downloaded artifacts
+        run: ls -R ./artifacts
+
       - name: Get Project Version
         id: version
         run: |
-          VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
-          VERSION=$(echo "$VERSION" | tr -d '\n\r')
+          # 更健壮的版本提取方法
+          VERSION=$(cargo metadata --format-version 1 --no-deps | grep -oP '"version":"\K[^"]+' | head -1)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Extracted version: $VERSION"
+
+      - name: Prepare release assets
+        run: |
+          # 创建发布目录并整理文件
+          mkdir -p release_assets
+          find ./artifacts -type f -exec cp {} release_assets/ \;
+          echo "Release assets prepared:"
+          ls -la release_assets/
 
       - name: Generate Release Notes Body
         id: release_body
         run: |
           SHASUM_TABLE=$(echo -e "| 文件名 | SHA256 值 |\n| :--- | :--- |")
           
-          for file in artifacts/*/*; do
+          for file in release_assets/*; do
             if [ -f "$file" ]; then
               filename=$(basename "$file")
               shasum=$(sha256sum "$file" | cut -d ' ' -f 1)
@@ -107,7 +121,7 @@ jobs:
           
           BODY=$(echo -e "## 文件校验\n\n为了验证下载文件的完整性，请使用以下 SHA256 校验和：\n\n$SHASUM_TABLE")
           
-          echo "release_body<<EOF" >> $GITHUB_OUTPUT
+          echo "body<<EOF" >> $GITHUB_OUTPUT
           echo "$BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
@@ -117,7 +131,7 @@ jobs:
         with:
           tag_name: v${{ env.VERSION }}
           name: Release v${{ env.VERSION }}
-          body: ${{ steps.release_body.outputs.release_body }}
-          files: artifacts/*/*
+          body: ${{ steps.release_body.outputs.body }}
+          files: release_assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
