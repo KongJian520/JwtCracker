@@ -1,9 +1,9 @@
 #![windows_subsystem = "windows"]
-mod Spinner;
 mod cli;
 mod combination_generator;
 mod gui;
 mod jwt;
+mod spinner;
 
 use crate::cli::run_cli;
 use crate::gui::show_gui;

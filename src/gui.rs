@@ -320,10 +320,10 @@ impl MainWindow {
 
         ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
             if self.status == RunningStatus::Running {
-                ui.add(crate::Spinner::Spinner::new().speed(2.0).clockwise(true));
+                ui.add(crate::spinner::Spinner::new().speed(2.0).clockwise(true));
             }
             if self.status == RunningStatus::Stopping {
-                ui.add(crate::Spinner::Spinner::new().speed(3.0).clockwise(false));
+                ui.add(crate::spinner::Spinner::new().speed(3.0).clockwise(false));
             }
             ui.add(Label::new(status_text));
 
