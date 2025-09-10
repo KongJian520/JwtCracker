@@ -34,7 +34,7 @@
 请确保电脑上有 Rust 编程环境。
 
 ```sh
-git clone [https://github.com/KongJian520/JwtCracker.git](https://github.com/KongJian520/JwtCracker.git)
+git clone https://github.com/KongJian520/JwtCracker.git
 cd JwtCracker
 cargo build --release
 ```
