@@ -84,9 +84,18 @@ jobs:
 
       - name: 获取项目版本
         id: version
+        if: matrix.os == 'ubuntu-latest'
         run: |
           VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: 获取项目版本
+        id: version
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $VERSION = (Get-Content Cargo.toml | Select-String -Pattern '^version\s*=') -replace '^version\s*=\s*"([^"]+)".*$', '$1'
+          echo "VERSION=$VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
 
       - name: 下载所有附件
         uses: actions/download-artifact@v4
