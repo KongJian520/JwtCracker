@@ -1,6 +1,6 @@
 [package]
 name = "JWTCracker"
-version = "0.1.1"
+version = "0.2.1"
 edition = "2024"
 
 [dependencies]
@@ -17,7 +17,15 @@ eframe = "0.32.1"
 egui = "0.32.1"
 egui_extras = { version = "0.32.1", features = ["syntect"] }
 crossbeam-channel = "0.5.15"
-epaint = "0.32.2"
+epaint = "0.32.1"
 
 [build-dependencies]
 winres = "0.1"
+
+[[bin]]
+name = "JwtCrackerGUI"
+path = "src/gui.rs"
+
+[[bin]]
+name = "JwtCrackerCLI"
+path = "src/cli.rs"

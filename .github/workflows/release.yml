@@ -36,9 +36,9 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # 步骤4：构建项目（发布模式）
+      # 步骤4：构建项目（发布模式），同时构建两个二进制文件
       - name: Build project
-        run: cargo build --release
+        run: cargo build --release --all-features --bins
 
       # 步骤5：获取项目元数据（项目名和版本号）
       - name: Get Project Metadata
@@ -50,13 +50,15 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
         shell: bash
 
-      # 步骤6：重命名可执行文件
-      - name: Rename executable
+      # 步骤6：重命名两个可执行文件
+      - name: Rename executables
         run: |
           if ("${{ matrix.os }}" -eq "windows-latest") {
-            mv target/release/${{ env.PROJECT_NAME }}.exe "${{ env.PROJECT_NAME }}-${{ env.VERSION }}.exe"
+            mv target/release/JwtCrackerGUI.exe "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI.exe"
+            mv target/release/JwtCrackerCLI.exe "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI.exe"
           } else {
-            mv target/release/${{ env.PROJECT_NAME }} "${{ env.PROJECT_NAME }}-${{ env.VERSION }}"
+            mv target/release/JwtCrackerGUI "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI"
+            mv target/release/JwtCrackerCLI "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI"
           }
         shell: pwsh
 
@@ -66,8 +68,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-${{ matrix.os }}
           path: |
-            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}.exe
-            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}
+            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-gui*
+            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-cli*
 
   # 发布工作：在所有构建完成后执行
   create_release:

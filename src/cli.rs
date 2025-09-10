@@ -1,12 +1,26 @@
-use crate::combination_generator::CombinationGenerator;
-use crate::Args;
-
-pub(crate) use crate::jwt::verify_jwt_hs256_token;
+use crate::utils::combination_generator::CombinationGenerator;
+use crate::utils::jwt::verify_jwt_hs256_token;
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::Rng;
 use rayon::current_thread_index;
 use rayon::iter::{ParallelBridge, ParallelIterator};
+
+mod utils;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    token: String,
+
+    #[arg(short = 'm', long = "min", default_value_t = 1)]
+    min_length: usize,
+
+    #[arg(short = 'x', long = "max", default_value_t = 10)]
+    max_length: usize,
+}
+
 fn init_progress_bar() -> ProgressBar {
     const TICK_CHARS: &[&str] = &[
         "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",
@@ -45,7 +59,7 @@ fn init_progress_bar() -> ProgressBar {
 }
 
 // 核心的命令行逻辑
-pub fn run_cli() {
+pub fn main() {
     let args = Args::parse();
     let token_to_crack = args.token.as_str();
     let min_length = args.min_length;
