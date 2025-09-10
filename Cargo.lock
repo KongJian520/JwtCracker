@@ -12,6 +12,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui_extras",
+    "epaint",
  "hmac",
  "indicatif",
  "jsonwebtoken",

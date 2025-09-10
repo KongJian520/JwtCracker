@@ -1,72 +1,65 @@
-// my_spinner.rs
+use egui::{Response, Sense, Ui, Widget, WidgetInfo, WidgetType};
+use epaint::{Color32, Pos2, Rect, Shape, Stroke, emath::lerp, vec2};
 
-use egui::{
-    Color32, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget, WidgetInfo, WidgetType, lerp,
-    vec2,
-};
-
-// 为 Spinner 添加可配置的字段
+/// A spinner widget used to indicate loading.
+///
+/// See also: [`crate::ProgressBar`].
+#[must_use = "You should put this widget in a ui with `ui.add(widget);`"]
+#[derive(Default)]
 pub struct Spinner {
+    /// Uses the style's `interact_size` if `None`.
     size: Option<f32>,
     color: Option<Color32>,
-    speed: f64,      // 旋转速度
-    clockwise: bool, // 是否顺时针
-}
-
-impl Default for Spinner {
-    fn default() -> Self {
-        Self {
-            size: None,
-            color: None,
-            speed: 1.0,      // 默认速度为 1.0
-            clockwise: true, // 默认顺时针
-        }
-    }
+    speed: Option<f64>,      // 旋转速度
+    clockwise: Option<bool>, // 是否顺时针
 }
 
 impl Spinner {
+    /// Create a new spinner that uses the style's `interact_size` unless changed.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Sets the spinner's size. The size sets both the height and width, as the spinner is always
+    /// square. If the size isn't set explicitly, the active style's `interact_size` is used.
+    #[inline]
     pub fn size(mut self, size: f32) -> Self {
         self.size = Some(size);
         self
     }
 
+    /// Sets the spinner's color.
+    #[inline]
     pub fn color(mut self, color: impl Into<Color32>) -> Self {
         self.color = Some(color.into());
         self
     }
 
-    // 新增方法：设置旋转速度
+    /// Sets the spinner's rotation speed.
     pub fn speed(mut self, speed: f64) -> Self {
-        self.speed = speed;
+        self.speed = Some(speed);
         self
     }
 
-    // 新增方法：设置旋转方向
+    /// Sets the spinner's rotation direction. True for clockwise, false for counter-clockwise.
     pub fn clockwise(mut self, clockwise: bool) -> Self {
-        self.clockwise = clockwise;
+        self.clockwise = Some(clockwise);
         self
     }
 
-    pub fn paint_at(&self, ui: &Ui, rect: Rect) {
+    /// Paint the spinner in the given rectangle.
+    pub fn paint_at(&self, ui: &Ui, rect: Rect, speed: f64, clockwise: bool) {
         if ui.is_rect_visible(rect) {
-            ui.ctx().request_repaint();
+            ui.ctx().request_repaint(); // because it is animated
 
             let color = self
                 .color
                 .unwrap_or_else(|| ui.visuals().strong_text_color());
             let radius = (rect.height() / 2.0) - 2.0;
             let n_points = (radius.round() as u32).clamp(8, 128);
-
             let time = ui.input(|i| i.time);
-
-            // 根据字段来计算旋转方向和速度
-            let rotation_direction = if self.clockwise { 1.0 } else { -1.0 };
-            let start_angle = time * self.speed * rotation_direction * std::f64::consts::TAU;
-
+            let start_angle =
+                time * speed * if clockwise { 1.0 } else { -1.0 } * std::f64::consts::TAU;
             let end_angle = start_angle + 240f64.to_radians() * time.sin();
             let points: Vec<Pos2> = (0..n_points)
                 .map(|i| {
@@ -87,8 +80,10 @@ impl Widget for Spinner {
             .size
             .unwrap_or_else(|| ui.style().spacing.interact_size.y);
         let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::hover());
+        let speed = self.speed.unwrap_or(1.0);
+        let clockwise = self.clockwise.unwrap_or(true);
         response.widget_info(|| WidgetInfo::new(WidgetType::ProgressIndicator));
-        self.paint_at(ui, rect);
+        self.paint_at(ui, rect, speed, clockwise);
 
         response
     }

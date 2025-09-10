@@ -17,6 +17,7 @@ eframe = "0.32.1"
 egui = "0.32.1"
 egui_extras = { version = "0.32.1", features = ["syntect"] }
 crossbeam-channel = "0.5.15"
+epaint = "0.32.2"
 
 [build-dependencies]
 winres = "0.1"
