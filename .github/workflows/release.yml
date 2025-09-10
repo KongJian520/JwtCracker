@@ -1,30 +1,36 @@
-name: 编译和发布
+name: Combined Release Workflow
 
 on:
   workflow_dispatch:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
-    name: ${{ matrix.os }} Build
+    name: Build & Test
     runs-on: ${{ matrix.os }}
-
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        include:
-          - os: ubuntu-latest
-            extension: ""
-            shell: bash
-          - os: windows-latest
-            extension: ".exe"
-            shell: pwsh
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cache Rust dependencies and build artifacts
-        uses: actions/cache@v3
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install build dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libgl-dev libglu1-mesa-dev
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -32,80 +38,36 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build project
-        run: cargo build --release --all-features --bins
-
-      - name: Get Project Metadata
-        id: metadata
-        shell: ${{ matrix.shell }}
+      - name: Build release binaries
         run: |
-          # 根据操作系统使用不同的方法提取元数据
-          if ("${{ matrix.os }}" -eq "windows-latest") {
-            # Windows 方法
-            $content = Get-Content Cargo.toml
-            $nameLine = $content | Where-Object { $_ -match '^name\s*=\s*"' }
-            $versionLine = $content | Where-Object { $_ -match '^version\s*=\s*"' }
-          
-            $PROJECT_NAME = $nameLine -replace '^name\s*=\s*"([^"]+)".*', '$1'
-            $VERSION = $versionLine -replace '^version\s*=\s*"([^"]+)".*', '$1'
-          
-            # 设置环境变量
-            Write-Output "PROJECT_NAME=$PROJECT_NAME" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-            Write-Output "VERSION=$VERSION" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          
-            # 调试信息
-            Write-Output "Extracted PROJECT_NAME: $PROJECT_NAME"
-            Write-Output "Extracted VERSION: $VERSION"
-          } else {
-            # Linux 方法
-            PROJECT_NAME=$(grep -E '^name\s*=' Cargo.toml | head -1 | sed -E 's/name\s*=\s*"([^"]+)".*/\1/')
-            VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
-          
-            # 确保值不包含换行符或特殊字符
-            PROJECT_NAME=$(echo "$PROJECT_NAME" | tr -d '\n\r')
-            VERSION=$(echo "$VERSION" | tr -d '\n\r')
-          
-            # 使用正确的格式设置环境变量
-            echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
-            echo "VERSION=$VERSION" >> $GITHUB_ENV
-          
-            # 添加调试信息
-            echo "Extracted PROJECT_NAME: $PROJECT_NAME"
-            echo "Extracted VERSION: $VERSION"
-          }
+          cargo build --release --locked --all-features
 
-      - name: Rename executables
-        shell: ${{ matrix.shell }}
-        run: |
-          # 根据操作系统使用不同的重命名方法
-          if ("${{ matrix.os }}" -eq "windows-latest") {
-            # Windows 方法
-            if (Test-Path "target\release\JwtCrackerGUI.exe") {
-              Move-Item "target\release\JwtCrackerGUI.exe" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI.exe"
-            }
-            if (Test-Path "target\release\JwtCrackerCLI.exe") {
-              Move-Item "target\release\JwtCrackerCLI.exe" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI.exe"
-            }
-          } else {
-            # Linux 方法
-            if [ -f "target/release/JwtCrackerGUI" ]; then
-              mv "target/release/JwtCrackerGUI" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI"
-            fi
-            if [ -f "target/release/JwtCrackerCLI" ]; then
-              mv "target/release/JwtCrackerCLI" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI"
-            fi
-          }
+      - name: Run tests
+        run: cargo test --verbose
 
-      - name: Upload Artifact
+      - name: Upload Linux Binary
+        if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-${{ matrix.os }}
-          path: |
-            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI${{ matrix.extension }}
-            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI${{ matrix.extension }}
+          name: JWTCracker-linux
+          path: target/release/JwtCrackerCLI
+          if-no-files-found: error
+
+      - name: Upload Windows Binary
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: JWTCracker-windows
+          path: target/release/JwtCrackerCLI.exe
+          if-no-files-found: error
+
+      - name: Upload macOS Binary
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: JWTCracker-macos
+          path: target/release/JwtCrackerCLI
+          if-no-files-found: error
 
   create_release:
     name: Create GitHub Release
@@ -142,7 +104,7 @@ jobs:
               SHASUM_TABLE=$(echo -e "$SHASUM_TABLE\n| $filename | \`$shasum\` |")
             fi
           done
-
+          
           BODY=$(echo -e "## 文件校验\n\n为了验证下载文件的完整性，请使用以下 SHA256 校验和：\n\n$SHASUM_TABLE")
           
           echo "release_body<<EOF" >> $GITHUB_OUTPUT
