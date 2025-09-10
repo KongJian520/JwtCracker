@@ -7,71 +7,81 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: 构建
-    runs-on: ${{ matrix.os }}
-    outputs:
-      version: ${{ steps.get-version.outputs.version }}
-    strategy:
-      matrix:
-        os: [ ubuntu-latest, windows-latest ]
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            arch: x86_64
-            extension: ""
-          - os: windows-latest
-            platform: windows
-            arch: x86_64
-            extension: ".exe"
+build:
+  name: 构建
+  runs-on: ${{ matrix.os }}
+  outputs:
+    version: ${{ steps.get-version.outputs.version }}
+  strategy:
+    matrix:
+      os: [ ubuntu-latest, windows-latest ]
+      include:
+        - os: ubuntu-latest
+          platform: linux
+          arch: x86_64
+          extension: ""
+        - os: windows-latest
+          platform: windows
+          arch: x86_64
+          extension: ".exe"
 
-    steps:
-      - name: 签出
-        uses: actions/checkout@v4
+  steps:
+    - name: 签出
+      uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
 
-      - name: 下载依赖(Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libgl-dev libglu1-mesa-dev
+    - name: 下载依赖(Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libgl-dev libglu1-mesa-dev
 
-      - name: 查找缓存
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+    - name: 查找缓存
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
 
-      - name: 构建
-        run: |
-          cargo build --release --locked --all-features
+    - name: 构建
+      run: |
+        cargo build --release --locked --all-features
 
-      - name: 获取项目版本
-        id: get-version
-        run: |
-          VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+    - name: 获取项目版本 (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      id: get-version
+      run: |
+        VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: 重命名并上传CLI二进制文件
-        uses: actions/upload-artifact@v4
-        with:
-          name: JWTCracker-${{ matrix.platform }}-${{ matrix.arch }}-CLI-v${{ steps.get-version.outputs.version }}
-          path: target/release/JwtCrackerCLI${{ matrix.extension }}
+    - name: 获取项目版本 (Windows)
+      if: matrix.os == 'windows-latest'
+      id: get-version
+      shell: pwsh
+      run: |
+        $VERSION = (Get-Content Cargo.toml | Select-String -Pattern '^version\s*=') -replace '^version\s*=\s*"([^"]+)".*$', '$1'
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: 重命名并上传GUI二进制文件
-        uses: actions/upload-artifact@v4
-        with:
-          name: JWTCracker-${{ matrix.platform }}-${{ matrix.arch }}-GUI-v${{ steps.get-version.outputs.version }}
-          path: target/release/JwtCrackerGUI${{ matrix.extension }}
+    - name: 重命名并上传CLI二进制文件
+      uses: actions/upload-artifact@v4
+      with:
+        name: JWTCracker-${{ matrix.platform }}-${{ matrix.arch }}-CLI-v${{ steps.get-version.outputs.version }}
+        path: target/release/JwtCrackerCLI${{ matrix.extension }}
+
+    - name: 重命名并上传GUI二进制文件
+      uses: actions/upload-artifact@v4
+      with:
+        name: JWTCracker-${{ matrix.platform }}-${{ matrix.arch }}-GUI-v${{ steps.get-version.outputs.version }}
+        path: target/release/JwtCrackerGUI${{ matrix.extension }}
+
 
   create_release:
     name: Create GitHub Release
