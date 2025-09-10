@@ -13,6 +13,15 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest ]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x86_64
+            extension: ""
+          - os: windows-latest
+            platform: windows
+            arch: x86_64
+            extension: ".exe"
 
     steps:
       - name: 签出
@@ -44,37 +53,23 @@ jobs:
         run: |
           cargo build --release --locked --all-features
 
-      - name: Upload Linux CLI Binary
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: JWTCracker-linux-CLI
-          path: target/release/JwtCrackerCLI
-          if-no-files-found: error
+      - name: 获取项目版本
+        id: version
+        run: |
+          VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Upload Linux GUI Binary
-        if: matrix.os == 'ubuntu-latest'
+      - name: 重命名并上传CLI二进制文件
         uses: actions/upload-artifact@v4
         with:
-          name: JWTCracker-linux-GUI
-          path: target/release/JwtCrackerGUI
-          if-no-files-found: error
+          name: JWTCracker-${{ matrix.platform }}-${{ matrix.arch }}-CLI-v${{ env.VERSION }}
+          path: target/release/JwtCrackerCLI${{ matrix.extension }}
 
-      - name: Upload Windows CLI Binary
-        if: matrix.os == 'windows-latest'
+      - name: 重命名并上传GUI二进制文件
         uses: actions/upload-artifact@v4
         with:
-          name: JWTCracker-windows-CLI
-          path: target/release/JwtCrackerCLI.exe
-          if-no-files-found: error
-
-      - name: Upload Windows GUI Binary
-        if: matrix.os == 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: JWTCracker-windows--GUI
-          path: target/release/JwtCrackerGUI.exe
-          if-no-files-found: error
+          name: JWTCracker-${{ matrix.platform }}-${{ matrix.arch }}-GUI-v${{ env.VERSION }}
+          path: target/release/JwtCrackerGUI${{ matrix.extension }}
 
   create_release:
     name: Create GitHub Release
@@ -84,43 +79,36 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repository
+      - name: 签出
         uses: actions/checkout@v4
+
+      - name: 获取项目版本
+        id: version
+        run: |
+          VERSION=$(grep -E '^version\s*=' Cargo.toml | head -1 | sed -E 's/version\s*=\s*"([^"]+)".*/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: 下载所有附件
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
 
-      - name: List downloaded artifacts
+      - name: 列表下载的附件
         run: ls -R ./artifacts
 
-      - name: Get Project Version
-        id: version
-        run: |
-          # 更健壮的版本提取方法
-          VERSION=$(cargo metadata --format-version 1 --no-deps | grep -oP '"version":"\K[^"]+' | head -1)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Extracted version: $VERSION"
-
-      - name: Prepare release assets
-        run: |
-          # 创建发布目录并整理文件
-          mkdir -p release_assets
-          find ./artifacts -type f -exec cp {} release_assets/ \;
-          echo "Release assets prepared:"
-          ls -la release_assets/
-
-      - name: Generate Release Notes Body
+      - name: 生成发布说明主体
         id: release_body
         run: |
           SHASUM_TABLE=$(echo -e "| 文件名 | SHA256 值 |\n| :--- | :--- |")
           
-          for file in release_assets/*; do
-            if [ -f "$file" ]; then
-              filename=$(basename "$file")
-              shasum=$(sha256sum "$file" | cut -d ' ' -f 1)
-              SHASUM_TABLE=$(echo -e "$SHASUM_TABLE\n| $filename | \`$shasum\` |")
+          # 找到所有下载的二进制文件并计算哈希值
+          for file_dir in artifacts/*; do
+            if [ -d "$file_dir" ]; then
+              for file in "$file_dir"/*; do
+                filename=$(basename "$file")
+                shasum=$(sha256sum "$file" | cut -d ' ' -f 1)
+                SHASUM_TABLE=$(echo -e "$SHASUM_TABLE\n| $filename | \`$shasum\` |")
+              done
             fi
           done
           
@@ -130,13 +118,13 @@ jobs:
           echo "$BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Create Release
+      - name: 创建发布
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ env.VERSION }}
           name: Release v${{ env.VERSION }}
           body: ${{ steps.release_body.outputs.body }}
-          files: release_assets/*
+          files: artifacts/*/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
