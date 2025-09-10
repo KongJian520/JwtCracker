@@ -1,4 +1,4 @@
-name: Rust CI
+name: 构建&发布
 
 on:
   push:
@@ -21,10 +21,10 @@ jobs:
       version: ${{ steps.get_version.outputs.PROJECT_VERSION }}
 
     steps:
-      - name: Checkout repository
+      - name: 签出代码
         uses: actions/checkout@v4
 
-      - name: Get project version
+      - name: 获取项目版本号
         id: get_version
         run: |
           VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d '"' -f 2)
@@ -32,10 +32,10 @@ jobs:
           echo "PROJECT_VERSION=$VERSION" >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Set up Rust
+      - name: 设置 Rust 环境
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo dependencies
+      - name: 缓存 Cargo 依赖
         uses: actions/cache@v4
         with:
           path: |
@@ -46,7 +46,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Install dependencies (Windows)
+      - name: 安装 Windows 依赖
         if: matrix.os == 'windows-latest'
         shell: powershell
         run: |
@@ -56,21 +56,21 @@ jobs:
           # 例如 `vcpkg` 或 `choco install visualstudio2019buildtools`
           # 这里为了简化，假设环境已准备好
 
-      - name: Install dependencies (Linux)
+      - name: 安装 Linux 依赖
         if: matrix.os == 'ubuntu-latest'
         run: |
           # 安装构建 GUI 所需的依赖，如 x11, gtk, libxcb 等
           sudo apt-get update
           sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
 
-      - name: Build release for Linux (x86_64)
+      - name: 构建 Linux 版本
         if: matrix.os == 'ubuntu-latest'
         run: |
           # 构建 CLI 和 GUI 两个版本
           cargo build --release --bin JwtCrackerCLI
           cargo build --release --bin JwtCrackerGUI
 
-      - name: Build release for Windows (x86_64)
+      - name: 构建 Windows 版本
         if: matrix.os == 'windows-latest'
         shell: powershell
         run: |
@@ -78,7 +78,7 @@ jobs:
           cargo build --release --bin JwtCrackerCLI
           cargo build --release --bin JwtCrackerGUI
 
-      - name: Prepare artifacts for upload (Linux)
+      - name: 准备 Linux 附件
         if: matrix.os == 'ubuntu-latest'
         run: |
           # 为 Linux 版本的二进制文件创建目录和重命名
@@ -86,7 +86,7 @@ jobs:
           mv target/release/JwtCrackerCLI artifacts_linux/JWTCracker-x86_64-linux-${{ env.PROJECT_VERSION }}
           mv target/release/JwtCrackerGUI artifacts_linux/JWTCracker-x86_64-linux-${{ env.PROJECT_VERSION }}-gui
 
-      - name: Prepare artifacts for upload (Windows)
+      - name: 准备 Windows 附件
         if: matrix.os == 'windows-latest'
         shell: powershell
         run: |
@@ -95,14 +95,14 @@ jobs:
           mv target/release/JwtCrackerCLI.exe artifacts_windows/JWTCracker-x86_64-windows-${{ env.PROJECT_VERSION }}.exe
           mv target/release/JwtCrackerGUI.exe artifacts_windows/JWTCracker-x86_64-windows-${{ env.PROJECT_VERSION }}-gui.exe
 
-      - name: Upload artifacts (Linux)
+      - name: 上传 Linux 附件
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: JWTCracker-linux-artifacts
           path: artifacts_linux/
 
-      - name: Upload artifacts (Windows)
+      - name: 上传 Windows 附件
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
@@ -110,14 +110,14 @@ jobs:
           path: artifacts_windows/
 
   create_release:
-    name: Create GitHub Release
+    name: 创建 GitHub 发布
     runs-on: ubuntu-latest
     needs: build
     permissions:
       contents: write
 
     steps:
-      - name: 签出
+      - name: 签出代码
         uses: actions/checkout@v4
 
       - name: 下载所有附件
