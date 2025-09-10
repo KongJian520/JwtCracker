@@ -51,7 +51,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: JWTCracker-linux
+          name: JWTCracker-linux-CLI
           path: target/release/JwtCrackerCLI
           if-no-files-found: error
 
@@ -59,7 +59,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: JWTCracker-linux
+          name: JWTCracker-linux-GUI
           path: target/release/JwtCrackerGUI
           if-no-files-found: error
 
@@ -67,7 +67,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: JWTCracker-windows
+          name: JWTCracker-windows-CLI
           path: target/release/JwtCrackerCLI.exe
           if-no-files-found: error
 
@@ -75,7 +75,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: JWTCracker-windows
+          name: JWTCracker-windows--GUI
           path: target/release/JwtCrackerGUI.exe
           if-no-files-found: error
 
@@ -83,7 +83,7 @@ jobs:
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: JWTCracker-macos
+          name: JWTCracker-macos-CLI
           path: target/release/JwtCrackerCLI
           if-no-files-found: error
 
@@ -91,7 +91,7 @@ jobs:
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: JWTCracker-macos
+          name: JWTCracker-macos-GUI
           path: target/release/JwtCrackerGUI
           if-no-files-found: error
 
