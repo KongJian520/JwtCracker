@@ -1,4 +1,3 @@
-use crate::ui::widget;
 use crate::ui::widget::spinner::Spinner;
 use crate::utils::combination_generator::CombinationGenerator;
 use crate::utils::jwt::verify_jwt_hs256_token;
@@ -250,7 +249,7 @@ impl MainWindow {
             // 使用 with_columns 方法创建两列，每列平分宽度
             jwt_ui.columns(2, |columns| {
                 // 第一列
-                columns[0]
+                if columns[0]
                     .add(
                         egui::TextEdit::multiline(&mut self.jwt_decoded_header)
                             .font(egui::TextStyle::Monospace)
@@ -261,10 +260,13 @@ impl MainWindow {
                             .layouter(&mut layouter),
                     )
                     .on_hover_text("Head部分")
-                    .changed();
+                    .changed()
+                {
+                    encode_jwt(self);
+                };
 
                 // 第二列
-                columns[1]
+                if columns[1]
                     .add(
                         egui::TextEdit::multiline(&mut self.jwt_decoded_payload)
                             .font(egui::TextStyle::Monospace)
@@ -275,7 +277,10 @@ impl MainWindow {
                             .layouter(&mut layouter),
                     )
                     .on_hover_text("Payload部分")
-                    .changed();
+                    .changed()
+                {
+                    encode_jwt(self);
+                };
             });
 
             jwt_ui
@@ -326,7 +331,7 @@ impl MainWindow {
                 ui.add(Spinner::new().speed(2.0).clockwise(true));
             }
             if self.status == RunningStatus::Stopping {
-                ui.add(widget::spinner::Spinner::new().speed(3.0).clockwise(false));
+                ui.add(Spinner::new().speed(3.0).clockwise(false));
             }
             ui.add(Label::new(status_text));
 

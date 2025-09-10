@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 use crate::ui::main_window::MainWindow;
 use epaint::text::{FontData, FontDefinitions};
 use std::sync::Arc;
