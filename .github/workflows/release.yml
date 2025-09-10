@@ -1,28 +1,26 @@
-# .github/workflows/release.yml
+name: 编译并发布
 
-name: Combined Release Workflow
-
-# 允许手动触发工作流
 on:
   workflow_dispatch:
 
 jobs:
-  # 构建工作：在多个平台上运行并上传工件
   build:
     name: ${{ matrix.os }} Build
     runs-on: ${{ matrix.os }}
 
-    # 使用矩阵策略在 Windows 和 Linux 上同时运行
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            extension: ""
+          - os: windows-latest
+            extension: ".exe"
 
     steps:
-      # 步骤1：检出仓库代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 步骤2：缓存 Rust 的依赖项和构建产物
       - name: Cache Rust dependencies and build artifacts
         uses: actions/cache@v3
         with:
@@ -32,15 +30,12 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      # 3. 设置 Rust 工具链
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # 4. 构建项目（发布模式），同时构建两个二进制文件
       - name: Build project
         run: cargo build --release --all-features --bins
 
-      # 5. 获取项目元数据（项目名和版本号）
       - name: Get Project Metadata
         id: metadata
         run: |
@@ -49,78 +44,63 @@ jobs:
           echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      # 6. 重命名两个可执行文件
       - name: Rename executables
         run: |
-          if ("${{ matrix.os }}" -eq "windows-latest") {
-            mv target/release/JwtCrackerGUI.exe "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI.exe"
-            mv target/release/JwtCrackerCLI.exe "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI.exe"
-          } else {
-            mv target/release/JwtCrackerGUI "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI"
-            mv target/release/JwtCrackerCLI "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI"
-          }
-        shell: pwsh
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            mv "target/release/JwtCrackerGUI.exe" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI.exe"
+            mv "target/release/JwtCrackerCLI.exe" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI.exe"
+          else
+            mv "target/release/JwtCrackerGUI" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI"
+            mv "target/release/JwtCrackerCLI" "${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI"
+          fi
 
-      # 7. 上传构建好的工件
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-${{ matrix.os }}
           path: |
-            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-gui*
-            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-cli*
+            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-GUI${{ matrix.extension }}
+            ${{ env.PROJECT_NAME }}-${{ env.VERSION }}-CLI${{ matrix.extension }}
 
-  # 发布工作：在所有构建完成后执行
   create_release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: build
-
-    # 为此工作授予写入权限
     permissions:
       contents: write
 
     steps:
-      # 1. 检出仓库代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 下载所有工件
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
 
-      # 3. 获取项目版本号
       - name: Get Project Version
         id: version
         run: |
           VERSION=$(grep '^version = ' Cargo.toml | sed -E 's/version = "(.+)"/\1/')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      # 4. 生成 Release Notes 内容
       - name: Generate Release Notes Body
         id: release_body
         run: |
-          # 创建表格头部
           SHASUM_TABLE=$(echo -e "| 文件名 | SHA256 值 |\n| :--- | :--- |")
           
-          # 遍历所有下载的工件并计算哈希值
           for file in artifacts/*/*; do
-            filename=$(basename $file)
+            filename=$(basename "$file")
             shasum=$(sha256sum "$file" | cut -d ' ' -f 1)
             SHASUM_TABLE=$(echo -e "$SHASUM_TABLE\n| $filename | \`$shasum\` |")
           done
 
-          # 组合正文和表格
           BODY=$(echo -e "## 文件校验\n\n为了验证下载文件的完整性，请使用以下 SHA256 校验和：\n\n$SHASUM_TABLE")
           
-          # 将最终正文内容设置为输出
           echo "release_body<<EOF" >> $GITHUB_OUTPUT
           echo "$BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # 5. 创建 GitHub Release 并附加所有工件
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1
